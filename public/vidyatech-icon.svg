@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img">
+  <title>VidyaTech Icon</title>
+  <desc>VidyaTech standalone V-circuit icon mark — favicon and app icon</desc>
+  <defs>
+    <linearGradient id="ico-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0F4C81"/>
+      <stop offset="100%" stop-color="#00C2CB"/>
+    </linearGradient>
+    <linearGradient id="ico-shine" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.2"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="120" height="120" rx="27" fill="url(#ico-bg)"/>
+  <rect width="120" height="120" rx="27" fill="url(#ico-shine)"/>
+
+  <!-- V left arm -->
+  <path d="M22 28 L55 87" stroke="white" stroke-width="9" stroke-linecap="round" fill="none"/>
+  <!-- V right arm -->
+  <path d="M60 93 L98 28" stroke="white" stroke-width="9" stroke-linecap="round" fill="none" opacity="0.5"/>
+
+  <!-- Crossbar -->
+  <line x1="22" y1="28" x2="98" y2="28" stroke="white" stroke-width="2.8" stroke-linecap="round" opacity="0.4"/>
+
+  <!-- Corner nodes -->
+  <circle cx="22" cy="28" r="5.5" fill="white" opacity="0.95"/>
+  <circle cx="60" cy="28" r="4" fill="white" opacity="0.55"/>
+  <circle cx="98" cy="28" r="5.5" fill="white" opacity="0.95"/>
+
+  <!-- V tip node -->
+  <circle cx="55" cy="87" r="7.5" fill="white"/>
+  <circle cx="55" cy="87" r="3.8" fill="url(#ico-bg)"/>
+
+  <!-- Vertical branch -->
+  <line x1="55" y1="94" x2="55" y2="105" stroke="white" stroke-width="2.5" stroke-linecap="round" opacity="0.48"/>
+  <circle cx="55" cy="109" r="4.5" fill="#00C2CB" opacity="0.95"/>
+  <circle cx="55" cy="109" r="2" fill="white" opacity="0.88"/>
+
+  <!-- Ambient grid dots -->
+  <circle cx="36" cy="58" r="2" fill="white" opacity="0.22"/>
+  <circle cx="79" cy="58" r="2" fill="white" opacity="0.22"/>
+</svg>

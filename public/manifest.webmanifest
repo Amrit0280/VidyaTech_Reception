@@ -1,0 +1,15 @@
+{
+  "name": "VidyaTech School ERP",
+  "short_name": "VidyaTech",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#060a12",
+  "theme_color": "#060a12",
+  "icons": [
+    {
+      "src": "/vidyatech-icon.svg",
+      "sizes": "120x120",
+      "type": "image/svg+xml"
+    }
+  ]
+}

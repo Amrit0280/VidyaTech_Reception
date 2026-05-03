@@ -1,0 +1,146 @@
+.site-header {
+  position: fixed;
+  top: 0;
+  z-index: 50;
+  width: 100%;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  backdrop-filter: blur(20px);
+}
+
+.nav-shell {
+  display: flex;
+  width: min(1160px, calc(100% - 40px));
+  height: 76px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin: 0 auto;
+}
+
+.brand-lockup {
+  display: flex;
+  min-width: 210px;
+  align-items: center;
+  gap: 12px;
+}
+
+.brand-mark {
+  display: inline-flex;
+  width: 42px;
+  height: 42px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--brand);
+  overflow: hidden;
+}
+
+.brand-mark img {
+  display: block;
+  width: 42px;
+  height: 42px;
+  object-fit: contain;
+}
+
+.brand-lockup strong,
+.brand-lockup small {
+  display: block;
+}
+
+.brand-lockup strong {
+  font-size: 0.98rem;
+  font-weight: 850;
+}
+
+.brand-lockup small {
+  max-width: 210px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.25;
+}
+
+.nav-links {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.nav-links a {
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 750;
+}
+
+.nav-links a.active,
+.nav-links a:hover {
+  background: rgba(15, 98, 254, 0.1);
+  color: var(--brand);
+}
+
+.nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.mobile-menu-button {
+  display: none;
+}
+
+.mobile-menu {
+  display: none;
+}
+
+@media (max-width: 1020px) {
+  .nav-links,
+  .nav-cta {
+    display: none;
+  }
+
+  .mobile-menu-button {
+    display: inline-flex;
+  }
+
+  .mobile-menu {
+    display: grid;
+    gap: 8px;
+    width: min(100% - 28px, 500px);
+    margin: 0 auto 16px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface);
+    padding: 14px;
+    box-shadow: var(--shadow);
+  }
+
+  .mobile-menu a {
+    border-radius: 8px;
+    padding: 12px;
+    color: var(--muted);
+    font-weight: 800;
+  }
+
+  .mobile-menu a.active {
+    background: rgba(15, 98, 254, 0.1);
+    color: var(--brand);
+  }
+}
+
+@media (max-width: 560px) {
+  .nav-shell {
+    width: min(100% - 24px, 1160px);
+  }
+
+  .brand-lockup {
+    min-width: 0;
+  }
+
+  .brand-lockup small {
+    display: none;
+  }
+}
