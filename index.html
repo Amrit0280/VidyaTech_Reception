@@ -1,18 +1,18 @@
 <!doctype html>
-<html lang="en" class="dark">
+<html lang="en">
 
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#060a12" />
+  <meta name="theme-color" content="#0f62fe" />
   <script>
     (() => {
       try {
         const savedTheme = localStorage.getItem("theme");
         const userSelectedTheme = localStorage.getItem("theme_user_selected") === "true";
-        document.documentElement.classList.toggle("dark", !userSelectedTheme || savedTheme === "dark");
+        document.documentElement.classList.toggle("dark", userSelectedTheme && savedTheme === "dark");
       } catch (_error) {
-        document.documentElement.classList.add("dark");
+        document.documentElement.classList.remove("dark");
       }
     })();
   </script>

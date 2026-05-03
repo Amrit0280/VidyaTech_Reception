@@ -92,6 +92,34 @@ The React frontend submits to `/api/leads`, which works on Vercel through the se
 
 ## Render Hosting Guide
 
+## Vercel Hosting Guide
+
+Vercel is the recommended deployment target for this React/Vite website and the `api/leads.js` serverless form endpoint.
+
+1. Push the project to GitHub.
+2. Go to Vercel and choose Add New Project.
+3. Import the GitHub repository.
+4. Use these settings:
+   - Framework Preset: `Vite`
+   - Install Command: `npm install`
+   - Build Command: `npm run build`
+   - Output Directory: `dist`
+5. Add Environment Variables in Vercel Project Settings:
+
+```env
+DATABASE_URL=postgresql://postgres:<encoded-password>@db.bwnvttxqveftbqjgbbhj.supabase.co:5432/postgres
+VITE_WHATSAPP_NUMBER=918318466940
+VITE_GOOGLE_MAPS_EMBED=https://www.google.com/maps?q=New%20Delhi%20India&output=embed
+```
+
+6. Deploy.
+7. Test:
+   - Open `/contact`
+   - Submit the demo form
+   - Check Supabase table `demo_leads`
+
+The included `vercel.json` sends React routes like `/about`, `/pricing`, and `/contact` to `index.html`, while `/api/leads` remains available as a serverless function.
+
 ### Backend on Render
 
 1. Push this project to GitHub.

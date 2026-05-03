@@ -23,7 +23,7 @@ export default function App() {
   const [theme, setThemeState] = useState(() => {
     const savedTheme = localStorage.getItem("theme");
     const userSelectedTheme = localStorage.getItem("theme_user_selected") === "true";
-    return userSelectedTheme && savedTheme ? savedTheme : "dark";
+    return userSelectedTheme && savedTheme ? savedTheme : "light";
   });
 
   const setTheme = (nextTheme) => {
