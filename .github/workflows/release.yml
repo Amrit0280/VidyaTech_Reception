@@ -66,12 +66,16 @@ jobs:
           $tag = "v$version"
 
           git add package.json package-lock.json
-          if (-not (git diff --cached --quiet)) {
+          git diff --cached --quiet
+          $hasVersionChanges = $LASTEXITCODE -ne 0
+          if ($hasVersionChanges) {
             git commit -m "chore(release): $tag [skip ci]"
             git push origin HEAD:main
           }
 
-          if (git rev-parse $tag 2>$null) {
+          git rev-parse --verify $tag 2>$null
+          $tagExists = $LASTEXITCODE -eq 0
+          if ($tagExists) {
             Write-Host "Tag $tag already exists locally."
           } else {
             git tag $tag
