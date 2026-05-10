@@ -61,6 +61,15 @@ const admissionSchema = z.object({
   notes: z.string().optional()
 });
 
+const certificateSchema = z.object({
+  studentId: z.coerce.number().int(),
+  type: z.string().min(2)
+});
+
+const idCardSchema = z.object({
+  studentId: z.coerce.number().int()
+});
+
 function isoDate(value) {
   if (!value) return null;
   return new Date(value).toISOString().slice(0, 10);
@@ -207,8 +216,20 @@ async function getSnapshotData(req) {
       guardianName: admission.guardian_name,
       phone: admission.phone,
       classRequested: admission.class_requested,
-      status: admission.workflow_status || admission.status
+      status: admission.workflow_status || admission.status,
+      date: isoDate(admission.created_at)
     })),
+    feeStructures: [],
+    certificates: [],
+    idCards: [],
+    activityLog: [
+      {
+        id: "cloud-sync",
+        title: "Cloud database connected",
+        detail: "Reception data loaded from PostgreSQL through the secure API",
+        date: todayText
+      }
+    ],
     dashboard: {
       todayAdmissions: admissionsResult.rows.filter((admission) => isoDate(admission.created_at) === todayText).length,
       todayCollection,
@@ -493,6 +514,87 @@ export async function createReceptionAdmission(req, res) {
       phone: rows[0].phone,
       classRequested: rows[0].class_requested,
       status: rows[0].workflow_status
+    }
+  });
+}
+
+export async function createReceptionCertificate(req, res) {
+  const payload = certificateSchema.parse(req.body);
+  const { rows: students } = await query(
+    "SELECT id, name, student_code FROM students WHERE id = $1 AND school_id = $2",
+    [payload.studentId, req.user.schoolId]
+  );
+
+  if (!students[0]) {
+    return res.status(404).json({ message: "Student not found" });
+  }
+
+  const certificateNo = `CERT-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`;
+  const { rows } = await query(
+    `
+      INSERT INTO certificates (school_id, student_id, certificate_type, certificate_no, qr_payload, issued_by)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      RETURNING *
+    `,
+    [
+      req.user.schoolId,
+      students[0].id,
+      payload.type,
+      certificateNo,
+      JSON.stringify({ certificateNo, studentCode: students[0].student_code }),
+      req.user.id
+    ]
+  );
+
+  await writeAuditLog(req, "certificate.issued", "certificates", rows[0].id, { certificateNo });
+  res.status(201).json({
+    certificate: {
+      id: String(rows[0].id),
+      certificateNo: rows[0].certificate_no,
+      studentId: String(students[0].id),
+      studentName: students[0].name,
+      type: rows[0].certificate_type,
+      date: isoDate(rows[0].issued_at),
+      status: rows[0].status
+    }
+  });
+}
+
+export async function createReceptionIdCard(req, res) {
+  const payload = idCardSchema.parse(req.body);
+  const { rows: students } = await query(
+    "SELECT id, name, student_code FROM students WHERE id = $1 AND school_id = $2",
+    [payload.studentId, req.user.schoolId]
+  );
+
+  if (!students[0]) {
+    return res.status(404).json({ message: "Student not found" });
+  }
+
+  const cardNo = `ID-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`;
+  const { rows } = await query(
+    `
+      INSERT INTO id_cards (school_id, student_id, card_no, qr_payload)
+      VALUES ($1, $2, $3, $4)
+      RETURNING *
+    `,
+    [
+      req.user.schoolId,
+      students[0].id,
+      cardNo,
+      JSON.stringify({ cardNo, studentCode: students[0].student_code })
+    ]
+  );
+
+  await writeAuditLog(req, "id_card.issued", "id_cards", rows[0].id, { cardNo });
+  res.status(201).json({
+    card: {
+      id: String(rows[0].id),
+      cardNo: rows[0].card_no,
+      studentId: String(students[0].id),
+      studentName: students[0].name,
+      status: rows[0].status,
+      issuedAt: isoDate(rows[0].issued_at)
     }
   });
 }

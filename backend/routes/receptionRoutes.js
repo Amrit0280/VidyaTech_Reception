@@ -3,6 +3,8 @@ import asyncHandler from "../middleware/asyncHandler.js";
 import { authenticate, authorize } from "../middleware/auth.js";
 import {
   createReceptionAdmission,
+  createReceptionCertificate,
+  createReceptionIdCard,
   createReceptionNotification,
   createReceptionPayment,
   createReceptionStudent,
@@ -22,5 +24,7 @@ router.post("/payments", authorize("admin", "accountant", "finance"), asyncHandl
 router.post("/credentials/reset", authorize("admin", "receptionist"), asyncHandler(resetReceptionPassword));
 router.post("/notifications", authorize("admin", "receptionist"), asyncHandler(createReceptionNotification));
 router.post("/admissions", authorize("admin", "receptionist"), asyncHandler(createReceptionAdmission));
+router.post("/certificates", authorize("admin", "receptionist"), asyncHandler(createReceptionCertificate));
+router.post("/id-cards", authorize("admin", "receptionist"), asyncHandler(createReceptionIdCard));
 
 export default router;

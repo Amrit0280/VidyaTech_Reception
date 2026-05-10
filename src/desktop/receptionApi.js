@@ -95,3 +95,19 @@ export async function createCloudAdmission(admission) {
   });
   return payload.admission;
 }
+
+export async function createCloudCertificate(certificate) {
+  const payload = await request("/api/reception/certificates", {
+    method: "POST",
+    body: JSON.stringify(certificate)
+  });
+  return payload.certificate;
+}
+
+export async function createCloudIdCard(card) {
+  const payload = await request("/api/reception/id-cards", {
+    method: "POST",
+    body: JSON.stringify(card)
+  });
+  return payload.card;
+}
