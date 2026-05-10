@@ -6,6 +6,7 @@ import App from "./App.js";
 import "./styles/global.css";
 import "./styles/navbar.css";
 import "./styles/home.css";
+import "./styles/reception.css";
 
 createRoot(document.getElementById("root")).render(
   React.createElement(

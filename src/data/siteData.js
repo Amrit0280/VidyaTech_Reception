@@ -15,10 +15,13 @@ import {
   WalletCards
 } from "lucide-react";
 
+const assetBase = import.meta.env.BASE_URL || "/";
+const assetPath = (fileName) => `${assetBase}${fileName}`;
+
 export const brand = {
   name: "VidyaTech",
-  logoIcon: "/vidyatech-icon.svg",
-  logoFull: "/vidyatech_full_logo_v3.svg",
+  logoIcon: assetPath("vidyatech-icon.svg"),
+  logoFull: assetPath("vidyatech_full_logo_v3.svg"),
   motive: "Connecting Every Institution With Technology",
   email: "mauryaamrit0280@gmail.com",
   phone: "+91 8318466940",

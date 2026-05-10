@@ -17,21 +17,32 @@ import salaryRoutes from "./routes/salaryRoutes.js";
 import resultRoutes from "./routes/resultRoutes.js";
 import brandingRoutes from "./routes/brandingRoutes.js";
 import leadRoutes from "./routes/leadRoutes.js";
+import receptionRoutes from "./routes/receptionRoutes.js";
 
 const app = express();
 const server = http.createServer(app);
-const allowedOrigin = process.env.CLIENT_URL || "http://localhost:5173";
+const allowedOrigins = (process.env.CLIENT_URL || "http://localhost:5173")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+const corsOrigin = (origin, callback) => {
+  if (!origin || allowedOrigins.includes(origin)) {
+    callback(null, true);
+    return;
+  }
+  callback(new Error(`CORS blocked origin: ${origin}`));
+};
 
 const io = new Server(server, {
   cors: {
-    origin: allowedOrigin,
+    origin: allowedOrigins,
     methods: ["GET", "POST", "PATCH", "DELETE"]
   }
 });
 
 app.set("io", io);
 app.use(helmet());
-app.use(cors({ origin: allowedOrigin, credentials: true }));
+app.use(cors({ origin: corsOrigin, credentials: true }));
 app.use(express.json({ limit: "1mb" }));
 app.use(morgan(process.env.NODE_ENV === "production" ? "combined" : "dev"));
 app.use(
@@ -62,6 +73,7 @@ app.use("/api/salaries", salaryRoutes);
 app.use("/api/results", resultRoutes);
 app.use("/api/branding", brandingRoutes);
 app.use("/api/leads", leadRoutes);
+app.use("/api/reception", receptionRoutes);
 
 io.on("connection", (socket) => {
   socket.on("join-school", (schoolId) => {

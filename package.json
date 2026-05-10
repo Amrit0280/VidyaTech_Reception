@@ -1,15 +1,28 @@
 {
   "name": "vidyatech-school-ecosystem",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
   "description": "Premium school technology business website and multi-role school management software ecosystem.",
+  "author": "VidyaTech",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Amrit0280/VidyaTech_Reception.git"
+  },
+  "homepage": "https://github.com/Amrit0280/VidyaTech_Reception#readme",
+  "main": "electron/main.cjs",
   "scripts": {
     "dev": "concurrently \"npm run dev:frontend\" \"npm run dev:backend\"",
     "dev:frontend": "vite --host 0.0.0.0",
     "dev:backend": "nodemon backend/server.js",
+    "dev:desktop": "concurrently \"npm run dev:frontend\" \"wait-on http://localhost:5173 && electron .\"",
     "start:backend": "node backend/server.js",
     "build": "vite build",
+    "build:desktop": "node scripts/build-desktop.cjs",
+    "dist": "node scripts/build-desktop.cjs",
+    "release": "node scripts/build-desktop.cjs --publish always",
+    "db:migrate": "node scripts/migrate.cjs",
+    "db:create-admin": "node scripts/create-admin.cjs",
     "preview": "vite preview --host 0.0.0.0",
     "lint": "eslint src backend --ext .js,.jsx"
   },
@@ -19,6 +32,7 @@
     "concurrently": "^9.1.2",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
+    "electron-updater": "^6.8.3",
     "express": "^4.21.2",
     "express-rate-limit": "^7.5.0",
     "framer-motion": "^11.15.0",
@@ -37,11 +51,56 @@
   },
   "devDependencies": {
     "autoprefixer": "^10.4.20",
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8",
     "eslint": "^9.17.0",
     "eslint-plugin-react": "^7.37.2",
     "nodemon": "^3.1.9",
     "postcss": "^8.4.49",
+    "rcedit": "^5.0.2",
     "tailwindcss": "^3.4.17",
-    "vite": "^5.4.11"
+    "vite": "^5.4.11",
+    "wait-on": "^8.0.1"
+  },
+  "build": {
+    "appId": "com.vidyatech.reception",
+    "productName": "VidyaTech Reception",
+    "directories": {
+      "output": "release-desktop"
+    },
+    "asar": false,
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "public/vidyatech-icon.svg",
+      "public/vidyatech_full_logo_v3.svg",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "electron/assets/app-icon.ico",
+      "signAndEditExecutable": false,
+      "artifactName": "VidyaTech-Reception-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "installerIcon": "electron/assets/app-icon.ico",
+      "uninstallerIcon": "electron/assets/app-icon.ico"
+    },
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.business"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Amrit0280",
+        "repo": "VidyaTech_Reception",
+        "releaseType": "release"
+      }
+    ]
   }
 }

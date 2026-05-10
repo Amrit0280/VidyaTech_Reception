@@ -8,6 +8,7 @@ import Services from "./pages/Services.jsx";
 import Demo from "./pages/Demo.jsx";
 import PricingPage from "./pages/PricingPage.jsx";
 import Contact from "./pages/Contact.jsx";
+import ReceptionDesktop from "./desktop/ReceptionDesktop.jsx";
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -20,6 +21,8 @@ function ScrollToTop() {
 }
 
 export default function App() {
+  const { pathname } = useLocation();
+  const isDesktopApp = typeof window !== "undefined" && Boolean(window.vidyaTechDesktop);
   const [theme, setThemeState] = useState(() => {
     const savedTheme = localStorage.getItem("theme");
     const userSelectedTheme = localStorage.getItem("theme_user_selected") === "true";
@@ -36,6 +39,10 @@ export default function App() {
     document.documentElement.classList.toggle("dark", theme === "dark");
     localStorage.setItem("theme", theme);
   }, [theme]);
+
+  if (isDesktopApp || pathname.startsWith("/reception-app")) {
+    return <ReceptionDesktop theme={theme} setTheme={setTheme} />;
+  }
 
   return (
     <div className="app-shell">

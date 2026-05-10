@@ -120,6 +120,220 @@ VITE_GOOGLE_MAPS_EMBED=https://www.google.com/maps?q=New%20Delhi%20India&output=
 
 The included `vercel.json` sends React routes like `/about`, `/pricing`, and `/contact` to `index.html`, while `/api/leads` remains available as a serverless function.
 
+## Windows Desktop App
+
+The project now includes a Windows-first Electron desktop application for school reception and fee management.
+
+### Run In Development
+
+```bash
+npm run dev:desktop
+```
+
+This opens the receptionist workspace at `/reception-app` inside Electron.
+
+### Build Windows Installer
+
+```bash
+npm run dist
+```
+
+Output:
+
+- Installer: `release-desktop/VidyaTech-Reception-Setup-1.0.0.exe`
+- Update metadata: `release-desktop/latest.yml`
+- Portable unpacked app: `release-desktop/win-unpacked/VidyaTech Reception.exe`
+
+### Desktop Auto Updates
+
+The desktop app uses `electron-updater` with Electron Builder, Windows NSIS, and GitHub Releases.
+
+Update behavior:
+
+- Checks for updates automatically shortly after app startup.
+- Shows a professional VidyaTech update window when a new version is found.
+- Downloads the update in the background.
+- Shows download progress.
+- Asks: "Update downloaded. Restart now?"
+- Installs the update when the user confirms restart.
+
+GitHub update provider:
+
+- Owner: `Amrit0280`
+- Repo: `VidyaTech_Reception`
+- Provider: GitHub Releases
+
+The GitHub repository should be public for installed customer apps. Do not ship a GitHub token inside the app.
+
+### Automated GitHub Release Pipeline
+
+The repository includes `.github/workflows/release.yml`.
+
+On every push to `main`, GitHub Actions will:
+
+1. Install dependencies with `npm ci`.
+2. Automatically run `npm version patch --no-git-tag-version`.
+3. Commit the new `package.json` and `package-lock.json` version back to `main` with `[skip ci]`.
+4. Create and push a `vX.X.X` tag.
+5. Build the Windows NSIS installer with `npm run release`.
+6. Create a GitHub Release.
+7. Upload the installer, blockmap, and `latest.yml`.
+
+GitHub secret required:
+
+1. Open `https://github.com/Amrit0280/VidyaTech_Reception`.
+2. Go to Settings -> Secrets and variables -> Actions.
+3. Add a repository secret:
+   - Name: `GH_TOKEN`
+   - Value: a GitHub personal access token with `repo` permission.
+
+The workflow also has a manual run option with `patch`, `minor`, `major`, or `none` version bump choices.
+
+### Manual Release Build
+
+For a local manual release, create a GitHub token with repository contents read/write access, then set it only in your terminal:
+
+```powershell
+$env:GH_TOKEN="your_github_token_here"
+```
+
+Bump the version before each customer release:
+
+```powershell
+npm.cmd version patch
+```
+
+Use `minor` for releases like `1.0.0` to `1.1.0`, and `major` for breaking releases.
+
+Build and upload the release artifacts:
+
+```powershell
+npm.cmd run release
+```
+
+The release command uploads these GitHub Release assets:
+
+- `VidyaTech-Reception-Setup-<version>.exe`
+- `VidyaTech-Reception-Setup-<version>.exe.blockmap`
+- `latest.yml`
+
+`latest.yml` is required by `electron-updater`. Do not rename or remove it from the GitHub Release.
+
+### Auto Update Testing
+
+First install test:
+
+1. Set package version to `1.0.0`.
+2. Push to `main`, or run `npm.cmd run release` manually.
+3. Install `VidyaTech-Reception-Setup-1.0.0.exe`.
+4. Confirm the app opens normally.
+
+Update test:
+
+1. Keep the installed `1.0.0` app on the computer.
+2. Push a new commit to `main`.
+3. Wait for the GitHub Actions release workflow to finish.
+4. Open the installed `1.0.0` app.
+5. The app should find the new GitHub Release, download it, and ask to restart.
+6. After restart, confirm the app is on the new version.
+
+For production, code signing is strongly recommended so Windows SmartScreen trusts the installer more quickly.
+
+### Phase 1 Cloud Reception Backend
+
+VidyaTech Reception now supports an API-first cloud mode:
+
+- Electron desktop app -> secure Express API -> PostgreSQL.
+- The desktop app never connects directly to PostgreSQL.
+- PostgreSQL credentials must live only in backend environment variables.
+- JWT authentication protects reception APIs.
+- bcrypt hashes staff, student, and parent credentials.
+
+Backend environment variables for Render:
+
+```bash
+NODE_ENV=production
+PORT=5000
+DATABASE_URL=<your Render PostgreSQL internal/external connection string>
+DB_SSL=true
+JWT_SECRET=<long random production secret>
+JWT_EXPIRES_IN=7d
+CLIENT_URL=<your deployed frontend origin, or localhost for development>
+```
+
+Desktop/frontend environment variable:
+
+```bash
+VITE_API_URL=https://your-render-api-service.onrender.com
+```
+
+Apply the Phase 1 database schema:
+
+```bash
+npm.cmd run db:migrate
+```
+
+Create the first school admin without committing credentials:
+
+```powershell
+$env:ADMIN_EMAIL="admin@school-domain.in"
+$env:ADMIN_PASSWORD="choose-a-strong-password"
+$env:ADMIN_NAME="School Admin"
+$env:ADMIN_SCHOOL_SLUG="skp-sainik-public-school"
+npm.cmd run db:create-admin
+```
+
+The migration creates or extends the production tables for:
+
+- `students`, `admissions`, `parents`, `student_documents`
+- `fee_structures`, `fee_payments`, `dues`, `receipts`
+- `users`, `credentials`, `certificates`, `notifications`
+- `reports`, `id_cards`, `audit_logs`
+
+Reception cloud endpoints:
+
+- `POST /api/auth/login`
+- `GET /api/reception/snapshot`
+- `GET /api/reception/search?q=...`
+- `POST /api/reception/students`
+- `POST /api/reception/payments`
+- `POST /api/reception/credentials/reset`
+- `POST /api/reception/notifications`
+- `POST /api/reception/admissions`
+
+Security note: if a real database URL was pasted into any chat or document, rotate that Render database password before production rollout.
+
+### Phase 1 Cloud Test Plan
+
+1. Set `DATABASE_URL`, `DB_SSL=true`, and `JWT_SECRET` on the backend service.
+2. Run `npm.cmd run db:migrate`.
+3. Create or confirm an `admin`, `receptionist`, or `accountant` user with `npm.cmd run db:create-admin`.
+4. Set `VITE_API_URL` to the deployed backend URL and build the desktop release.
+5. Install the app, open Backup & Settings, and sign in to cloud mode.
+6. Create a student admission record.
+7. Record a fee payment and confirm a receipt appears.
+8. Reset a student password and verify the audit log row is written.
+9. Queue a notification and confirm it appears in the notification log.
+10. Push a versioned release to GitHub and confirm existing users receive the auto-update.
+
+### Desktop Features
+
+- Reception dashboard with quick actions
+- Student fee billing and receipt generation
+- Print/save receipt as PDF
+- Pending dues and overdue tracking
+- Student search by name, class, roll, admission number, or mobile
+- Student portal ID and password generation/reset
+- Notification queue and history
+- Admission enquiry overview
+- Financial reports and CSV export
+- Encrypted local desktop data store
+- Backup and restore workflow
+- Offline-first design with future online sync hooks
+- Role-ready structure for Receptionist, Accountant, Admin, and Principal
+
+The Electron shell uses `contextIsolation`, disables Node access in the browser window, and exposes only a small secure preload API for local data, backup, restore, sync, and PDF export.
+
 ### Backend on Render
 
 1. Push this project to GitHub.

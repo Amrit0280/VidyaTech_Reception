@@ -1,0 +1,590 @@
+.reception-shell {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  min-height: 100vh;
+  background:
+    linear-gradient(90deg, rgba(15, 98, 254, 0.04) 1px, transparent 1px),
+    linear-gradient(rgba(15, 98, 254, 0.035) 1px, transparent 1px),
+    var(--bg);
+  background-size: 64px 64px;
+  color: var(--ink);
+}
+
+.reception-loading {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  align-content: center;
+  gap: 16px;
+}
+
+.reception-loading img {
+  width: 58px;
+  height: 58px;
+}
+
+.reception-sidebar {
+  position: sticky;
+  top: 0;
+  display: flex;
+  height: 100vh;
+  flex-direction: column;
+  gap: 20px;
+  border-right: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  padding: 22px;
+  backdrop-filter: blur(18px);
+}
+
+.reception-brand {
+  display: grid;
+  gap: 8px;
+}
+
+.reception-full-logo {
+  width: min(210px, 100%);
+  height: auto;
+}
+
+.reception-brand span {
+  display: block;
+}
+
+.reception-brand span {
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 750;
+}
+
+.reception-nav {
+  display: grid;
+  gap: 7px;
+}
+
+.reception-nav button,
+.quick-actions button {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-weight: 850;
+  text-align: left;
+}
+
+.reception-nav button {
+  min-height: 46px;
+  padding: 12px;
+}
+
+.reception-nav button.active,
+.reception-nav button:hover,
+.quick-actions button:hover {
+  border-color: rgba(15, 98, 254, 0.2);
+  background: rgba(15, 98, 254, 0.1);
+  color: var(--brand);
+}
+
+.reception-secure-card {
+  display: grid;
+  gap: 8px;
+  margin-top: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(31, 182, 166, 0.08);
+  padding: 16px;
+}
+
+.reception-secure-card svg {
+  color: var(--aqua);
+}
+
+.reception-secure-card span {
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.55;
+}
+
+.reception-workspace {
+  min-width: 0;
+}
+
+.reception-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: grid;
+  grid-template-columns: minmax(240px, 0.75fr) minmax(360px, 1fr) auto;
+  gap: 18px;
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg) 85%, transparent);
+  padding: 18px 24px;
+  backdrop-filter: blur(18px);
+}
+
+.reception-topbar h1 {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 900;
+}
+
+.reception-topbar span {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.reception-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 0 14px;
+}
+
+.reception-search input {
+  width: 100%;
+  min-height: 46px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  outline: 0;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sync-pill,
+.soft-pill,
+.danger-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 999px;
+  padding: 8px 11px;
+  font-size: 0.8rem;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.sync-pill,
+.soft-pill {
+  background: rgba(15, 98, 254, 0.1);
+  color: var(--brand);
+}
+
+.danger-pill {
+  background: rgba(220, 38, 38, 0.1);
+  color: #dc2626;
+}
+
+.reception-content {
+  padding: 24px;
+}
+
+.reception-metrics,
+.report-cards {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.reception-metrics article,
+.report-cards article,
+.reception-panel,
+.credential-card,
+.settings-grid article {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface) 90%, transparent);
+  box-shadow: var(--soft-shadow);
+}
+
+.reception-metrics article,
+.report-cards article {
+  display: grid;
+  gap: 8px;
+  padding: 18px;
+}
+
+.reception-metrics svg,
+.report-cards svg,
+.panel-heading > svg,
+.settings-grid svg {
+  color: var(--brand);
+}
+
+.reception-metrics span,
+.report-cards span {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.reception-metrics strong,
+.report-cards strong {
+  font-size: 1.65rem;
+  font-weight: 900;
+}
+
+.reception-grid {
+  display: grid;
+  gap: 20px;
+}
+
+.reception-grid.two,
+.billing-grid {
+  grid-template-columns: minmax(0, 1fr) minmax(420px, 0.85fr);
+}
+
+.student-grid {
+  grid-template-columns: minmax(420px, 0.9fr) minmax(0, 1.1fr);
+}
+
+.reception-panel {
+  padding: 22px;
+}
+
+.panel-heading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 20px;
+}
+
+.panel-heading span {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--brand);
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.panel-heading h2 {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 900;
+}
+
+.quick-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.quick-actions button {
+  min-height: 112px;
+  flex-direction: column;
+  align-items: start;
+  justify-content: end;
+  border-color: var(--line);
+  background: var(--surface);
+  padding: 18px;
+  color: var(--ink);
+}
+
+.reception-form {
+  display: grid;
+  gap: 15px;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.reception-field {
+  display: grid;
+  gap: 8px;
+  color: var(--ink);
+  font-weight: 850;
+}
+
+.reception-field input,
+.reception-field select,
+.reception-field textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  padding: 13px 14px;
+  outline: 0;
+}
+
+.reception-field textarea {
+  resize: vertical;
+}
+
+.receipt-preview {
+  display: grid;
+  place-items: start center;
+}
+
+.receipt-paper {
+  width: min(100%, 430px);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  color: #07111f;
+  padding: 24px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.12);
+}
+
+.receipt-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid rgba(7, 17, 31, 0.12);
+  padding-bottom: 16px;
+}
+
+.receipt-logo {
+  width: 150px;
+  max-width: 46%;
+  height: auto;
+}
+
+.receipt-head strong,
+.receipt-head span {
+  display: block;
+}
+
+.receipt-head span,
+.receipt-meta span,
+.empty-state span {
+  color: #5d6a7d;
+}
+
+.receipt-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 18px 0;
+}
+
+.receipt-paper dl {
+  display: grid;
+  grid-template-columns: 0.9fr 1.1fr;
+  gap: 12px;
+  margin: 0 0 22px;
+}
+
+.receipt-paper dt {
+  color: #5d6a7d;
+  font-weight: 800;
+}
+
+.receipt-paper dd {
+  margin: 0;
+  font-weight: 900;
+  text-align: right;
+}
+
+.empty-state {
+  display: grid;
+  min-height: 260px;
+  place-items: center;
+  align-content: center;
+  gap: 10px;
+  text-align: center;
+}
+
+.data-table {
+  display: grid;
+  gap: 8px;
+}
+
+.table-row {
+  display: grid;
+  grid-template-columns: 1.3fr 0.7fr 1fr 0.7fr 0.7fr;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 12px 14px;
+}
+
+.table-head {
+  background: rgba(15, 98, 254, 0.1);
+  color: var(--brand);
+  font-weight: 900;
+}
+
+.student-list,
+.notice-list,
+.credential-grid,
+.settings-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.student-list button {
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+  padding: 14px;
+  text-align: left;
+}
+
+.student-list button.active {
+  border-color: rgba(15, 98, 254, 0.45);
+  background: rgba(15, 98, 254, 0.1);
+}
+
+.student-list span,
+.student-list small,
+.notice-list span,
+.settings-grid span,
+.credential-card span {
+  color: var(--muted);
+}
+
+.credential-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.credential-card {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+}
+
+.credential-card > div {
+  display: grid;
+  gap: 7px;
+}
+
+.credential-card svg {
+  color: var(--brand);
+}
+
+.credential-card code {
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  background: rgba(15, 98, 254, 0.08);
+  padding: 10px;
+  color: var(--ink);
+  font-weight: 900;
+}
+
+.notice-list article {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 14px;
+}
+
+.notice-list p {
+  margin-bottom: 8px;
+}
+
+.settings-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.settings-grid article {
+  display: grid;
+  gap: 10px;
+  padding: 18px;
+}
+
+.compact-login {
+  display: grid;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.compact-login input {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  padding: 11px 12px;
+  font: inherit;
+}
+
+.reception-toast {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 60;
+  max-width: 420px;
+  border: 1px solid rgba(31, 182, 166, 0.35);
+  border-radius: 8px;
+  background: #062d2a;
+  color: #7ff4e7;
+  padding: 14px 16px;
+  box-shadow: var(--shadow);
+  font-weight: 850;
+}
+
+@media print {
+  .reception-sidebar,
+  .reception-topbar,
+  .reception-panel:not(.receipt-preview),
+  .reception-toast {
+    display: none !important;
+  }
+
+  .reception-shell,
+  .reception-workspace,
+  .reception-content,
+  .billing-grid {
+    display: block;
+    background: #ffffff;
+    padding: 0;
+  }
+
+  .receipt-preview {
+    border: 0;
+    box-shadow: none;
+  }
+}
+
+@media (max-width: 1180px) {
+  .reception-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .reception-sidebar {
+    position: static;
+    height: auto;
+  }
+
+  .reception-nav {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .reception-topbar,
+  .reception-grid.two,
+  .billing-grid,
+  .student-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .reception-metrics,
+  .report-cards,
+  .credential-grid,
+  .settings-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
