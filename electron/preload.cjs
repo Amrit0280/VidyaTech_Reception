@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld("vidyaTechDesktop", {
   saveBackup: (data) => ipcRenderer.invoke("reception:save-backup", data),
   restoreBackup: () => ipcRenderer.invoke("reception:restore-backup"),
   printToPdf: () => ipcRenderer.invoke("reception:print-to-pdf"),
+  printReceiptHtml: (html) => ipcRenderer.invoke("reception:print-receipt-html", html),
   syncLead: (payload) => ipcRenderer.invoke("reception:sync-lead", payload),
   platform: process.platform
 });

@@ -111,6 +111,39 @@ ipcMain.handle("reception:print-to-pdf", async (event) => {
   return { ok: true, file: result.filePath };
 });
 
+ipcMain.handle("reception:print-receipt-html", async (_event, html) => {
+  const receiptWindow = new BrowserWindow({
+    width: 900,
+    height: 1100,
+    show: false,
+    title: "Print Fee Receipt",
+    icon: appIcon,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: true
+    }
+  });
+
+  try {
+    await receiptWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+    const result = await new Promise((resolve, reject) => {
+      receiptWindow.webContents.print({ silent: false, printBackground: true }, (success, failureReason) => {
+        if (!success && failureReason) {
+          reject(new Error(failureReason));
+          return;
+        }
+        resolve({ ok: true, canceled: !success });
+      });
+    });
+    return result;
+  } finally {
+    if (!receiptWindow.isDestroyed()) {
+      receiptWindow.close();
+    }
+  }
+});
+
 ipcMain.handle("reception:sync-lead", async (_event, payload) => {
   const endpoint = process.env.VIDYATECH_SYNC_URL || process.env.VITE_API_URL || "";
   if (!endpoint) {

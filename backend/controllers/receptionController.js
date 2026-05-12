@@ -18,7 +18,8 @@ const studentSchema = z.object({
   address: z.string().optional(),
   previousSchool: z.string().optional(),
   aadhaarId: z.string().optional(),
-  photoUrl: z.string().optional(),
+  profilePhoto: z.string().optional(),
+  house: z.string().optional(),
   admissionNumber: z.string().optional(),
   className: z.string().min(1),
   section: z.string().optional(),
@@ -30,7 +31,18 @@ const studentSchema = z.object({
   email: z.string().email().optional().or(z.literal("")),
   occupation: z.string().optional(),
   feePlan: z.string().optional(),
-  dueBalance: z.coerce.number().min(0).optional()
+  dueBalance: z.coerce.number().min(0).optional(),
+  documents: z.array(z.any()).optional()
+});
+
+const documentSchema = z.object({
+  type: z.string().min(2),
+  label: z.string().min(2),
+  fileName: z.string().min(1),
+  fileType: z.string().optional(),
+  fileSize: z.coerce.number().min(0).optional(),
+  dataUrl: z.string().optional(),
+  status: z.string().optional()
 });
 
 const paymentSchema = z.object({
@@ -70,12 +82,16 @@ const idCardSchema = z.object({
   studentId: z.coerce.number().int()
 });
 
+const deleteStudentSchema = z.object({
+  mode: z.enum(["soft", "permanent"]).optional()
+});
+
 function isoDate(value) {
   if (!value) return null;
   return new Date(value).toISOString().slice(0, 10);
 }
 
-function mapStudent(row) {
+function mapStudent(row, documents = []) {
   return {
     id: String(row.id),
     databaseId: row.id,
@@ -93,15 +109,49 @@ function mapStudent(row) {
     address: row.address || "",
     previousSchool: row.previous_school || "",
     aadhaarId: row.aadhaar_id || "",
+    house: row.house || "",
     email: row.parent_email || "",
     feePlan: row.fee_plan || "Monthly",
     dueBalance: Number(row.due_balance || 0),
     attendance: Number(row.attendance || 100),
-    status: row.admission_status === "enrolled" ? "Active" : row.admission_status,
+    status: row.is_deleted ? "Inactive" : row.admission_status === "enrolled" ? "Active" : row.admission_status,
+    isDeleted: Boolean(row.is_deleted),
+    deletedAt: row.deleted_at || null,
+    deletedBy: row.deleted_by || "",
+    profilePhoto: row.profile_photo || row.photo_url || "/vidyatech-icon.svg",
+    documents,
     portalId: row.student_code,
     password: "Stored encrypted",
     session: row.session || ""
   };
+}
+
+function mapDocument(row) {
+  return {
+    id: String(row.id),
+    type: row.document_type,
+    label: row.document_label || row.document_type,
+    fileName: row.file_name || "Document",
+    fileType: row.file_type || "",
+    fileSize: Number(row.file_size || 0),
+    dataUrl: row.file_url || "",
+    uploadedAt: row.created_at,
+    status: row.verification_status || "Uploaded"
+  };
+}
+
+async function getNextAdmissionNumber(client, schoolId) {
+  const year = new Date().getFullYear();
+  const { rows } = await client.query(
+    `
+      SELECT COALESCE(MAX(substring(admission_number from $2)::int), 0) AS max_no
+      FROM students
+      WHERE school_id = $1
+        AND admission_number ~ $3
+    `,
+    [schoolId, `^ADM-${year}-(\\d+)$`, `^ADM-${year}-\\d+$`]
+  );
+  return `ADM-${year}-${String(Number(rows[0]?.max_no || 0) + 1).padStart(4, "0")}`;
 }
 
 function mapPayment(row) {
@@ -138,7 +188,7 @@ async function getSchool(req) {
 
 async function getSnapshotData(req) {
   const school = await getSchool(req);
-  const [studentsResult, paymentsResult, notificationsResult, admissionsResult, certificateResult, idCardResult] =
+  const [studentsResult, documentsResult, paymentsResult, notificationsResult, admissionsResult, certificateResult] =
     await Promise.all([
       query(
         `
@@ -147,6 +197,15 @@ async function getSnapshotData(req) {
           LEFT JOIN parents p ON p.student_id = st.id AND p.school_id = st.school_id
           WHERE st.school_id = $1
           ORDER BY st.created_at DESC
+        `,
+        [req.user.schoolId]
+      ),
+      query(
+        `
+          SELECT *
+          FROM student_documents
+          WHERE school_id = $1
+          ORDER BY created_at DESC
         `,
         [req.user.schoolId]
       ),
@@ -182,11 +241,16 @@ async function getSnapshotData(req) {
         `,
         [req.user.schoolId]
       ),
-      query("SELECT COUNT(*)::int AS count FROM certificates WHERE school_id = $1", [req.user.schoolId]),
-      query("SELECT COUNT(*)::int AS count FROM id_cards WHERE school_id = $1 AND status = 'active'", [req.user.schoolId])
+      query("SELECT COUNT(*)::int AS count FROM certificates WHERE school_id = $1", [req.user.schoolId])
     ]);
 
-  const students = studentsResult.rows.map(mapStudent);
+  const documentsByStudent = documentsResult.rows.reduce((groups, document) => {
+    const key = String(document.student_id || "");
+    groups[key] = groups[key] || [];
+    groups[key].push(mapDocument(document));
+    return groups;
+  }, {});
+  const students = studentsResult.rows.map((student) => mapStudent(student, documentsByStudent[String(student.id)] || []));
   const payments = paymentsResult.rows.map(mapPayment);
   const todayText = new Date().toISOString().slice(0, 10);
   const todayCollection = payments
@@ -234,7 +298,7 @@ async function getSnapshotData(req) {
       todayAdmissions: admissionsResult.rows.filter((admission) => isoDate(admission.created_at) === todayText).length,
       todayCollection,
       certificatesIssued: certificateResult.rows[0]?.count || 0,
-      activeIdCards: idCardResult.rows[0]?.count || 0
+      pendingDocuments: students.filter((student) => (student.documents || []).length < 4).length
     },
     settings: {
       role: req.user.role,
@@ -255,6 +319,7 @@ export async function createReceptionStudent(req, res) {
   const result = await transaction(async (client) => {
     const school = await client.query("SELECT slug FROM schools WHERE id = $1", [req.user.schoolId]);
     const studentCode = await generateStudentCode(client, req.user.schoolId, school.rows[0]?.slug);
+    const admissionNumber = payload.admissionNumber || await getNextAdmissionNumber(client, req.user.schoolId);
     const password = generatePassword();
     const passwordHash = await bcrypt.hash(password, 12);
 
@@ -272,17 +337,17 @@ export async function createReceptionStudent(req, res) {
         INSERT INTO students (
           school_id, user_id, student_code, admission_number, name, class_name, section, roll_number,
           gender, dob, guardian_name, guardian_phone, address, father_name, mother_name,
-          previous_school, aadhaar_id, photo_url, session, parent_mobile, alternate_mobile,
+          previous_school, aadhaar_id, profile_photo, photo_url, house, session, parent_mobile, alternate_mobile,
           parent_email, parent_occupation, admission_status, due_balance
         )
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,'enrolled',$24)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,'enrolled',$26)
         RETURNING *
       `,
       [
         req.user.schoolId,
         user.rows[0].id,
         studentCode,
-        payload.admissionNumber || `ADM-${Date.now()}`,
+        admissionNumber,
         payload.name,
         payload.className,
         payload.section || null,
@@ -296,7 +361,9 @@ export async function createReceptionStudent(req, res) {
         payload.motherName || null,
         payload.previousSchool || null,
         payload.aadhaarId || null,
-        payload.photoUrl || null,
+        payload.profilePhoto || null,
+        payload.profilePhoto || null,
+        payload.house || null,
         payload.session || null,
         payload.parentMobile || payload.mobile,
         payload.alternateMobile || null,
@@ -329,6 +396,31 @@ export async function createReceptionStudent(req, res) {
       `,
       [req.user.schoolId, user.rows[0].id, student.rows[0].id, studentCode, passwordHash]
     );
+
+    for (const rawDocument of payload.documents || []) {
+      const document = documentSchema.partial({ label: true, fileName: true }).parse(rawDocument);
+      await client.query(
+        `
+          INSERT INTO student_documents (
+            school_id, student_id, document_type, document_label, file_name, file_type,
+            file_size, file_url, verification_status, uploaded_by
+          )
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+        `,
+        [
+          req.user.schoolId,
+          student.rows[0].id,
+          document.type,
+          document.label || document.type,
+          document.fileName || "Uploaded document",
+          document.fileType || null,
+          document.fileSize || 0,
+          document.dataUrl || null,
+          document.status || "uploaded",
+          req.user.id
+        ]
+      );
+    }
 
     return { student: student.rows[0], credentials: { login: studentCode, password } };
   });
@@ -597,6 +689,99 @@ export async function createReceptionIdCard(req, res) {
       issuedAt: isoDate(rows[0].issued_at)
     }
   });
+}
+
+export async function deleteReceptionStudent(req, res) {
+  const { studentId } = z.object({ studentId: z.coerce.number().int() }).parse(req.params);
+  const payload = deleteStudentSchema.parse(req.body || {});
+
+  if (payload.mode === "permanent" && req.user.role !== "super_admin") {
+    return res.status(403).json({ message: "Permanent delete is restricted to super admin users." });
+  }
+
+  if (payload.mode === "permanent") {
+    const { rows } = await query(
+      "DELETE FROM students WHERE id = $1 AND school_id = $2 RETURNING id, name, admission_number",
+      [studentId, req.user.schoolId]
+    );
+    if (!rows[0]) {
+      return res.status(404).json({ message: "Student not found" });
+    }
+    await writeAuditLog(req, "student.permanent_deleted", "students", studentId, rows[0]);
+    return res.json({ ok: true, mode: "permanent" });
+  }
+
+  const { rows } = await query(
+    `
+      UPDATE students
+      SET is_deleted = true,
+          admission_status = 'inactive',
+          deleted_at = NOW(),
+          deleted_by = $3,
+          updated_at = NOW()
+      WHERE id = $1 AND school_id = $2
+      RETURNING id, name, admission_number
+    `,
+    [studentId, req.user.schoolId, req.user.role]
+  );
+
+  if (!rows[0]) {
+    return res.status(404).json({ message: "Student not found" });
+  }
+
+  await writeAuditLog(req, "student.soft_deleted", "students", studentId, rows[0]);
+  res.json({ ok: true, mode: "soft" });
+}
+
+export async function upsertReceptionStudentDocument(req, res) {
+  const { studentId } = z.object({ studentId: z.coerce.number().int() }).parse(req.params);
+  const payload = documentSchema.parse(req.body);
+
+  const { rows } = await query(
+    `
+      INSERT INTO student_documents (
+        school_id, student_id, document_type, document_label, file_name, file_type,
+        file_size, file_url, verification_status, uploaded_by
+      )
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+      ON CONFLICT (school_id, student_id, document_type)
+      DO UPDATE SET
+        document_label = EXCLUDED.document_label,
+        file_name = EXCLUDED.file_name,
+        file_type = EXCLUDED.file_type,
+        file_size = EXCLUDED.file_size,
+        file_url = EXCLUDED.file_url,
+        verification_status = EXCLUDED.verification_status,
+        uploaded_by = EXCLUDED.uploaded_by,
+        updated_at = NOW()
+      RETURNING *
+    `,
+    [
+      req.user.schoolId,
+      studentId,
+      payload.type,
+      payload.label,
+      payload.fileName,
+      payload.fileType || null,
+      payload.fileSize || 0,
+      payload.dataUrl || null,
+      payload.status || "uploaded",
+      req.user.id
+    ]
+  );
+
+  if (payload.type === "passportPhoto" && payload.dataUrl) {
+    await query(
+      "UPDATE students SET profile_photo = $1, photo_url = $1, updated_at = NOW() WHERE id = $2 AND school_id = $3",
+      [payload.dataUrl, studentId, req.user.schoolId]
+    );
+  }
+
+  await writeAuditLog(req, "student.document.upserted", "student_documents", rows[0].id, {
+    studentId,
+    documentType: payload.type
+  });
+  res.status(201).json({ document: mapDocument(rows[0]) });
 }
 
 export async function searchReception(req, res) {

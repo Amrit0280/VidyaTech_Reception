@@ -65,6 +65,21 @@ export async function createCloudStudent(student) {
   return payload;
 }
 
+export async function deleteCloudStudent(studentId, mode = "soft") {
+  return request(`/api/reception/students/${studentId}`, {
+    method: "DELETE",
+    body: JSON.stringify({ mode })
+  });
+}
+
+export async function upsertCloudStudentDocument(studentId, document) {
+  const payload = await request(`/api/reception/students/${studentId}/documents`, {
+    method: "POST",
+    body: JSON.stringify(document)
+  });
+  return payload.document;
+}
+
 export async function createCloudPayment(payment) {
   const payload = await request("/api/reception/payments", {
     method: "POST",

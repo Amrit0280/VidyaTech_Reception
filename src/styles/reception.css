@@ -375,6 +375,13 @@
 .receipt-preview {
   display: grid;
   place-items: start center;
+  gap: 14px;
+}
+
+.receipt-toolbar {
+  width: min(100%, 430px);
+  display: flex;
+  justify-content: flex-end;
 }
 
 .receipt-paper {
@@ -419,6 +426,15 @@
   margin: 18px 0;
 }
 
+.receipt-title {
+  margin-top: 18px;
+  color: #0f62fe;
+  font-size: 1rem;
+  font-weight: 900;
+  text-align: center;
+  text-transform: uppercase;
+}
+
 .receipt-paper dl {
   display: grid;
   grid-template-columns: 0.9fr 1.1fr;
@@ -435,6 +451,22 @@
   margin: 0;
   font-weight: 900;
   text-align: right;
+}
+
+.receipt-signatures {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 34px;
+}
+
+.receipt-signatures span {
+  border-top: 1px solid rgba(7, 17, 31, 0.36);
+  padding-top: 8px;
+  color: #526172;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-align: center;
 }
 
 .empty-state {
@@ -486,6 +518,196 @@
   cursor: pointer;
   padding: 14px;
   text-align: left;
+}
+
+.student-record {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 12px;
+}
+
+.student-record.active {
+  border-color: rgba(15, 98, 254, 0.45);
+  background: rgba(15, 98, 254, 0.1);
+}
+
+.student-record > button {
+  display: grid;
+  grid-template-columns: 46px 1fr;
+  gap: 12px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+}
+
+.student-record img,
+.profile-header img {
+  width: 46px;
+  height: 46px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.student-record-actions,
+.inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.student-record-actions .btn,
+.inline-actions .btn {
+  min-height: 34px;
+  padding: 8px 10px;
+  font-size: 0.78rem;
+}
+
+.admission-grid,
+.profile-grid {
+  grid-template-columns: minmax(460px, 0.95fr) minmax(0, 1fr);
+}
+
+.document-upload-grid,
+.filter-grid,
+.profile-sections,
+.document-library {
+  display: grid;
+  gap: 12px;
+}
+
+.document-upload-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.document-upload {
+  display: grid;
+  gap: 6px;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  cursor: pointer;
+  padding: 14px;
+}
+
+.document-upload input {
+  display: none;
+}
+
+.document-upload.uploaded {
+  border-style: solid;
+  border-color: rgba(31, 182, 166, 0.36);
+  background: rgba(31, 182, 166, 0.08);
+}
+
+.document-upload span,
+.document-upload small,
+.profile-header p,
+.document-card span {
+  color: var(--muted);
+}
+
+.profile-header {
+  display: grid;
+  grid-template-columns: 88px 1fr;
+  gap: 18px;
+  align-items: center;
+  margin-bottom: 18px;
+}
+
+.profile-header img {
+  width: 88px;
+  height: 88px;
+}
+
+.profile-header h2 {
+  margin: 8px 0 4px;
+  font-size: 1.75rem;
+}
+
+.alert-strip {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid rgba(220, 38, 38, 0.22);
+  border-radius: 8px;
+  background: rgba(220, 38, 38, 0.08);
+  color: #dc2626;
+  padding: 12px 14px;
+  font-weight: 850;
+  margin-bottom: 18px;
+}
+
+.profile-sections {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: 20px;
+}
+
+.profile-sections article,
+.document-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 14px;
+}
+
+.profile-sections h3,
+.document-library h3 {
+  margin: 0 0 12px;
+}
+
+.profile-sections dl {
+  display: grid;
+  grid-template-columns: 0.8fr 1.2fr;
+  gap: 9px;
+  margin: 0;
+}
+
+.profile-sections dt {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.profile-sections dd {
+  margin: 0;
+  font-weight: 850;
+}
+
+.document-card {
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  gap: 12px;
+  align-items: center;
+}
+
+.document-card.missing {
+  background: rgba(220, 38, 38, 0.04);
+}
+
+.filter-grid {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  margin-bottom: 18px;
+}
+
+.management-table .table-row {
+  grid-template-columns: 1.2fr 0.6fr 0.7fr 1.5fr 0.7fr 1.1fr;
+}
+
+.compact-table .table-row {
+  grid-template-columns: 1.1fr 0.7fr 0.8fr 0.8fr 0.8fr;
+}
+
+.settings-grid select {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  padding: 11px 12px;
 }
 
 .student-list button.active {
@@ -687,6 +909,7 @@
 @media print {
   .reception-sidebar,
   .reception-topbar,
+  .receipt-toolbar,
   .reception-panel:not(.receipt-preview),
   .reception-toast {
     display: none !important;
@@ -724,7 +947,9 @@
   .reception-topbar,
   .reception-grid.two,
   .billing-grid,
-  .student-grid {
+  .student-grid,
+  .admission-grid,
+  .profile-grid {
     grid-template-columns: 1fr;
   }
 
@@ -737,7 +962,10 @@
   }
 
   .fee-structure-strip,
-  .id-card-preview {
+  .id-card-preview,
+  .document-upload-grid,
+  .profile-sections,
+  .filter-grid {
     grid-template-columns: 1fr;
   }
 }

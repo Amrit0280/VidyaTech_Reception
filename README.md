@@ -169,7 +169,7 @@ The GitHub repository should be public for installed customer apps. Do not ship 
 
 The repository includes `.github/workflows/release.yml`.
 
-On every push to `main`, GitHub Actions will:
+For this review phase, the workflow is manual-only and must be started from GitHub Actions after approval. When manually approved and run, GitHub Actions will:
 
 1. Install dependencies with `npm ci`.
 2. Automatically run `npm version patch --no-git-tag-version`.
@@ -187,7 +187,7 @@ GitHub secret required:
    - Name: `GH_TOKEN`
    - Value: a GitHub personal access token with `repo` permission.
 
-The workflow also has a manual run option with `patch`, `minor`, `major`, or `none` version bump choices.
+The workflow has `patch`, `minor`, `major`, or `none` version bump choices. Re-enable push-triggered releases only after a production rollout policy is approved.
 
 ### Manual Release Build
 
@@ -224,15 +224,15 @@ The release command uploads these GitHub Release assets:
 First install test:
 
 1. Set package version to `1.0.0`.
-2. Push to `main`, or run `npm.cmd run release` manually.
+2. Run the release workflow manually, or run `npm.cmd run release` manually after approval.
 3. Install `VidyaTech-Reception-Setup-1.0.0.exe`.
 4. Confirm the app opens normally.
 
 Update test:
 
 1. Keep the installed `1.0.0` app on the computer.
-2. Push a new commit to `main`.
-3. Wait for the GitHub Actions release workflow to finish.
+2. Bump/release a new version after approval.
+3. Wait for the GitHub Actions release workflow or manual release command to finish.
 4. Open the installed `1.0.0` app.
 5. The app should find the new GitHub Release, download it, and ask to restart.
 6. After restart, confirm the app is on the new version.
@@ -314,16 +314,20 @@ Security note: if a real database URL was pasted into any chat or document, rota
 7. Record a fee payment and confirm a receipt appears.
 8. Reset a student password and verify the audit log row is written.
 9. Queue a notification and confirm it appears in the notification log.
-10. Push a versioned release to GitHub and confirm existing users receive the auto-update.
+10. After approval, publish a versioned release to GitHub and confirm existing users receive the auto-update.
 
 ### Desktop Features
 
 - Reception dashboard with quick actions
-- Student fee billing and receipt generation
-- Print/save receipt as PDF
+- Student fee billing and school-standard receipt generation
+- Receipt-only print workflow through the system print dialog
 - Pending dues and overdue tracking
 - Student search by name, class, roll, admission number, or mobile
 - Student portal ID and password generation/reset
+- Admission workflow with automatic admission numbers
+- Student profiles with uploaded document library and profile photo
+- Management filters for class, section, dues, documents, house, and status
+- WhatsApp-ready PNG report generation
 - Notification queue and history
 - Admission enquiry overview
 - Financial reports and CSV export
@@ -333,6 +337,34 @@ Security note: if a real database URL was pasted into any chat or document, rota
 - Role-ready structure for Receptionist, Accountant, Admin, and Principal
 
 The Electron shell uses `contextIsolation`, disables Node access in the browser window, and exposes only a small secure preload API for local data, backup, restore, sync, and PDF export.
+
+### Reception Upgrade Review Notes
+
+This workspace includes an unreleased operational upgrade for admissions, profiles, documents, dues reporting, and professional receipts.
+
+Local review rules:
+
+- Do not push until manually approved.
+- Do not run `npm.cmd version ...` until manually approved.
+- Do not run `npm.cmd run release` until manually approved.
+- Do not publish a GitHub Release until manually approved.
+
+Database migration:
+
+```bash
+node scripts/migrate.cjs
+```
+
+Main upgrade areas:
+
+- Admission tab is now the single source for new registrations.
+- Admission numbers are generated as `ADM-YYYY-0001`.
+- Student deletion is soft-delete by default and Admin-only.
+- Document uploads support PDF, JPG, and PNG metadata/files.
+- Student Profile tab shows full profile, credentials, fee status, and documents.
+- Management tab filters class, section, dues, document status, document type, house, and status.
+- Shareable PNG report export is available for WhatsApp/parent communication.
+- Fee receipt printing uses an external print action and prints only the receipt design.
 
 ### Backend on Render
 

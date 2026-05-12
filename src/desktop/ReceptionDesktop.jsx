@@ -6,7 +6,10 @@ import {
   CheckCircle2,
   Cloud,
   Download,
-  Fingerprint,
+  Eye,
+  FileText,
+  Filter,
+  ImagePlus,
   KeyRound,
   LayoutDashboard,
   LockKeyhole,
@@ -21,8 +24,10 @@ import {
   Settings,
   ShieldCheck,
   Sun,
+  Trash2,
   Upload,
   UserPlus,
+  UserRoundCheck,
   UsersRound,
   WalletCards
 } from "lucide-react";
@@ -36,31 +41,41 @@ import {
   YAxis
 } from "recharts";
 import { brand } from "../data/siteData.js";
-import { createReceiptNo, generatePassword, loadReceptionData, saveReceptionData } from "./receptionStore.js";
+import {
+  createAdmissionNumber,
+  createPortalId,
+  createReceiptNo,
+  documentTypes,
+  generatePassword,
+  loadReceptionData,
+  saveReceptionData
+} from "./receptionStore.js";
 import {
   clearCloudSession,
   createCloudAdmission,
   createCloudCertificate,
-  createCloudIdCard,
   createCloudNotification,
   createCloudPayment,
   createCloudStudent,
+  deleteCloudStudent,
   getCloudSession,
   hasCloudApi,
   loadCloudReceptionData,
   loginToCloud,
-  resetCloudPassword
+  resetCloudPassword,
+  upsertCloudStudentDocument
 } from "./receptionApi.js";
 
 const tabs = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { id: "admissions", label: "Admissions", icon: UserPlus },
+  { id: "profiles", label: "Student Profile", icon: UserRoundCheck },
   { id: "billing", label: "Fee Billing", icon: ReceiptText },
   { id: "dues", label: "Dues", icon: WalletCards },
   { id: "students", label: "Students", icon: UsersRound },
+  { id: "management", label: "Management", icon: Filter },
   { id: "credentials", label: "IDs & Passwords", icon: KeyRound },
   { id: "certificates", label: "Certificates", icon: Printer },
-  { id: "idcards", label: "ID Cards", icon: Fingerprint },
   { id: "notifications", label: "Notifications", icon: BellRing },
   { id: "reports", label: "Reports", icon: BadgeIndianRupee },
   { id: "settings", label: "Backup & Settings", icon: Settings }
@@ -69,6 +84,8 @@ const tabs = [
 const feeTypes = ["Admission", "Tuition", "Transport", "Exam", "Miscellaneous"];
 const paymentModes = ["Cash", "UPI", "Card", "Bank Transfer"];
 const admissionStatuses = ["Inquiry", "Pending", "Approved", "Enrolled"];
+const schoolHouses = ["Blue", "Green", "Red", "Yellow"];
+const emptyFilterValue = "All";
 const certificateTypes = [
   "Admission Confirmation",
   "Fee Receipt",
@@ -89,6 +106,45 @@ function formatMoney(value) {
     currency: "INR",
     maximumFractionDigits: 0
   }).format(Number(value || 0));
+}
+
+function isAdminRole(role = "") {
+  return ["admin", "principal", "super admin", "super_admin"].includes(String(role).toLowerCase());
+}
+
+function isSuperAdminRole(role = "") {
+  return ["super admin", "super_admin"].includes(String(role).toLowerCase());
+}
+
+function activeOnly(students = []) {
+  return students.filter((student) => !student.isDeleted && student.status !== "Inactive");
+}
+
+function getStudentDocuments(student) {
+  return Array.isArray(student?.documents) ? student.documents : [];
+}
+
+function getMissingDocuments(student) {
+  const uploadedTypes = new Set(getStudentDocuments(student).map((document) => document.type));
+  return documentTypes.filter((document) => document.required && !uploadedTypes.has(document.id));
+}
+
+function getDocumentLabel(type) {
+  return documentTypes.find((document) => document.id === type)?.label || type;
+}
+
+function getFileAccept(type) {
+  return type === "passportPhoto" ? "image/png,image/jpeg,image/jpg" : "application/pdf,image/png,image/jpeg,image/jpg";
+}
+
+function downloadBlob(content, fileName, type) {
+  const blob = content instanceof Blob ? content : new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 function metricTrend(payments) {
@@ -124,6 +180,16 @@ export default function ReceptionDesktop({ theme, setTheme }) {
   const [selectedStudentId, setSelectedStudentId] = useState("");
   const [toast, setToast] = useState("");
   const [receipt, setReceipt] = useState(null);
+  const [uploadProgress, setUploadProgress] = useState({});
+  const [managementFilters, setManagementFilters] = useState({
+    className: emptyFilterValue,
+    section: emptyFilterValue,
+    feeDues: emptyFilterValue,
+    pendingDocuments: emptyFilterValue,
+    documentType: emptyFilterValue,
+    house: emptyFilterValue,
+    admissionStatus: emptyFilterValue
+  });
   const [feeForm, setFeeForm] = useState({
     feeType: "Tuition Fee",
     amount: 4500,
@@ -152,12 +218,11 @@ export default function ReceptionDesktop({ theme, setTheme }) {
     address: "",
     previousSchool: "",
     aadhaarId: "",
-    photoUrl: "",
+    house: "Blue",
     feePlan: "Monthly",
-    birthCertificate: false,
-    transferCertificate: false,
-    aadhaarDocument: false,
-    photoDocument: false
+    admissionStatus: "Pending",
+    documents: [],
+    profilePhoto: ""
   });
   const [admissionForm, setAdmissionForm] = useState({
     studentName: "",
@@ -184,7 +249,6 @@ export default function ReceptionDesktop({ theme, setTheme }) {
     message: "",
     channel: "App + SMS"
   });
-  const [idCardBatch, setIdCardBatch] = useState("selected");
 
   async function loadData() {
     try {
@@ -193,7 +257,7 @@ export default function ReceptionDesktop({ theme, setTheme }) {
         setCloudMode(true);
         setCloudUser(getCloudSession().user);
         setData(cloudData);
-        setSelectedStudentId(cloudData.students[0]?.id || "");
+        setSelectedStudentId(activeOnly(cloudData.students)[0]?.id || "");
         return;
       }
     } catch (error) {
@@ -204,7 +268,7 @@ export default function ReceptionDesktop({ theme, setTheme }) {
     const loadedData = await loadReceptionData();
     setCloudMode(false);
     setData(loadedData);
-    setSelectedStudentId(loadedData.students[0]?.id || "");
+    setSelectedStudentId(activeOnly(loadedData.students)[0]?.id || "");
   }
 
   useEffect(() => {
@@ -230,15 +294,17 @@ export default function ReceptionDesktop({ theme, setTheme }) {
     return data?.students.find((student) => student.id === selectedStudentId) || null;
   }, [data, selectedStudentId]);
 
+  const activeStudents = useMemo(() => activeOnly(data?.students || []), [data]);
+
   const filteredStudents = useMemo(() => {
     const term = query.trim().toLowerCase();
     if (!data) {
       return [];
     }
     if (!term) {
-      return data.students;
+      return activeStudents;
     }
-    return data.students.filter((student) => {
+    return activeStudents.filter((student) => {
       return [
         student.name,
         student.className,
@@ -253,26 +319,64 @@ export default function ReceptionDesktop({ theme, setTheme }) {
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(term));
     });
-  }, [data, query]);
+  }, [activeStudents, data, query]);
+
+  const deletedStudents = useMemo(() => {
+    return (data?.students || []).filter((student) => student.isDeleted || student.status === "Inactive");
+  }, [data]);
+
+  const nextAdmissionNumber = useMemo(() => createAdmissionNumber(data || { students: [], admissions: [] }), [data]);
+
+  const filterOptions = useMemo(() => {
+    const unique = (selector) => [emptyFilterValue, ...new Set(activeStudents.map(selector).filter(Boolean))];
+    return {
+      classes: unique((student) => student.className),
+      sections: unique((student) => student.section),
+      houses: unique((student) => student.house),
+      statuses: unique((student) => student.status || "Active")
+    };
+  }, [activeStudents]);
+
+  const managementStudents = useMemo(() => {
+    return activeStudents.filter((student) => {
+      const missingDocuments = getMissingDocuments(student);
+      const documents = getStudentDocuments(student);
+      const hasDocumentType =
+        managementFilters.documentType === emptyFilterValue ||
+        documents.some((document) => document.type === managementFilters.documentType);
+      return (
+        (managementFilters.className === emptyFilterValue || student.className === managementFilters.className) &&
+        (managementFilters.section === emptyFilterValue || student.section === managementFilters.section) &&
+        (managementFilters.house === emptyFilterValue || student.house === managementFilters.house) &&
+        (managementFilters.admissionStatus === emptyFilterValue || (student.status || "Active") === managementFilters.admissionStatus) &&
+        (managementFilters.feeDues === emptyFilterValue ||
+          (managementFilters.feeDues === "With Dues" ? Number(student.dueBalance || 0) > 0 : Number(student.dueBalance || 0) <= 0)) &&
+        (managementFilters.pendingDocuments === emptyFilterValue ||
+          (managementFilters.pendingDocuments === "Pending" ? missingDocuments.length > 0 : missingDocuments.length === 0)) &&
+        hasDocumentType
+      );
+    });
+  }, [activeStudents, managementFilters]);
 
   const stats = useMemo(() => {
     if (!data) {
       return { totalStudents: 0, dues: 0, overdue: 0, collection: 0 };
     }
     return {
-      totalStudents: data.students.length,
-      dues: data.students.reduce((total, student) => total + Number(student.dueBalance || 0), 0),
-      overdue: data.students.filter((student) => Number(student.dueBalance || 0) > 5000).length,
+      totalStudents: activeStudents.length,
+      dues: activeStudents.reduce((total, student) => total + Number(student.dueBalance || 0), 0),
+      overdue: activeStudents.filter((student) => Number(student.dueBalance || 0) > 5000).length,
       collection: data.payments.reduce((total, payment) => total + Number(payment.total || 0), 0),
       todayCollection: data.payments
         .filter((payment) => payment.date === today())
         .reduce((total, payment) => total + Number(payment.total || 0), 0),
       todayAdmissions: data.admissions.filter((admission) => admission.date === today()).length,
       certificatesIssued: data.certificates.length,
-      newRegistrations: data.students.filter((student) => student.createdAt === today()).length,
-      activeStudents: data.students.filter((student) => student.status === "Active").length
+      newRegistrations: activeStudents.filter((student) => student.createdAt === today()).length,
+      activeStudents: activeStudents.filter((student) => student.status === "Active").length,
+      pendingDocuments: activeStudents.filter((student) => getMissingDocuments(student).length > 0).length
     };
-  }, [data]);
+  }, [activeStudents, data]);
 
   if (!data) {
     return (
@@ -296,7 +400,7 @@ export default function ReceptionDesktop({ theme, setTheme }) {
       setCloudMode(true);
       const cloudData = await loadCloudReceptionData();
       setData(cloudData);
-      setSelectedStudentId(cloudData.students[0]?.id || "");
+      setSelectedStudentId(activeOnly(cloudData.students)[0]?.id || "");
       showToast("Cloud login successful.");
     } catch (error) {
       console.error(error);
@@ -332,6 +436,162 @@ export default function ReceptionDesktop({ theme, setTheme }) {
     setNoticeForm((current) => ({ ...current, [field]: value }));
   }
 
+  function patchManagementFilter(field, value) {
+    setManagementFilters((current) => ({ ...current, [field]: value }));
+  }
+
+  function resetAdmissionForm() {
+    setStudentForm({
+      name: "",
+      admissionNumber: "",
+      fatherName: "",
+      motherName: "",
+      dob: "",
+      gender: "Male",
+      className: "",
+      section: "",
+      rollNumber: "",
+      session: data?.school?.session || "2026-27",
+      parentName: "",
+      mobile: "",
+      alternateMobile: "",
+      email: "",
+      occupation: "",
+      address: "",
+      previousSchool: "",
+      aadhaarId: "",
+      house: "Blue",
+      feePlan: "Monthly",
+      admissionStatus: "Pending",
+      documents: [],
+      profilePhoto: ""
+    });
+    setUploadProgress({});
+  }
+
+  function handleDocumentUpload(type, file) {
+    if (!file) {
+      return;
+    }
+
+    const allowedTypes = ["application/pdf", "image/png", "image/jpeg", "image/jpg"];
+    if (!allowedTypes.includes(file.type)) {
+      showToast("Only PDF, JPG, and PNG documents are allowed.");
+      return;
+    }
+
+    const maxSize = 8 * 1024 * 1024;
+    if (file.size > maxSize) {
+      showToast("Document must be below 8 MB.");
+      return;
+    }
+
+    setUploadProgress((current) => ({ ...current, [type]: 45 }));
+    const reader = new FileReader();
+    reader.onload = () => {
+      const document = {
+        id: `doc-${Date.now()}-${type}`,
+        type,
+        label: getDocumentLabel(type),
+        fileName: file.name,
+        fileType: file.type,
+        fileSize: file.size,
+        dataUrl: reader.result,
+        uploadedAt: new Date().toISOString(),
+        status: "Uploaded"
+      };
+
+      setStudentForm((current) => {
+        const documents = [
+          document,
+          ...(current.documents || []).filter((item) => item.type !== type)
+        ];
+        return {
+          ...current,
+          documents,
+          profilePhoto: type === "passportPhoto" ? reader.result : current.profilePhoto
+        };
+      });
+      setUploadProgress((current) => ({ ...current, [type]: 100 }));
+      showToast(`${document.label} uploaded.`);
+    };
+    reader.onerror = () => showToast("Could not read selected document.");
+    reader.readAsDataURL(file);
+  }
+
+  function downloadDocument(studentDocument) {
+    if (!studentDocument?.dataUrl) {
+      showToast("This document only has metadata. No local file is attached.");
+      return;
+    }
+
+    const link = document.createElement("a");
+    link.href = studentDocument.dataUrl;
+    link.download = studentDocument.fileName || `${studentDocument.label}.pdf`;
+    link.click();
+  }
+
+  function replaceStudentDocument(studentId, type, file) {
+    if (!file) {
+      return;
+    }
+
+    const allowedTypes = ["application/pdf", "image/png", "image/jpeg", "image/jpg"];
+    if (!allowedTypes.includes(file.type)) {
+      showToast("Only PDF, JPG, and PNG documents are allowed.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const studentDocument = {
+        id: `doc-${Date.now()}-${type}`,
+        type,
+        label: getDocumentLabel(type),
+        fileName: file.name,
+        fileType: file.type,
+        fileSize: file.size,
+        dataUrl: reader.result,
+        uploadedAt: new Date().toISOString(),
+        status: "Uploaded"
+      };
+
+      const targetStudent = data.students.find((student) => student.id === studentId);
+      if (cloudMode && targetStudent?.databaseId) {
+        try {
+          await upsertCloudStudentDocument(targetStudent.databaseId, studentDocument);
+          const cloudData = await loadCloudReceptionData();
+          setData(cloudData);
+          showToast(`${studentDocument.label} updated in cloud.`);
+          return;
+        } catch (error) {
+          console.error(error);
+          showToast(error.message || "Could not update cloud document.");
+          return;
+        }
+      }
+
+      setData((current) => ({
+        ...current,
+        students: current.students.map((student) =>
+          student.id === studentId
+            ? {
+                ...student,
+                profilePhoto: type === "passportPhoto" ? reader.result : student.profilePhoto,
+                documents: [studentDocument, ...getStudentDocuments(student).filter((document) => document.type !== type)]
+              }
+            : student
+        ),
+        activityLog: [
+          { id: `act-${Date.now()}`, title: "Student document updated", detail: `${getDocumentLabel(type)} replaced`, date: today() },
+          ...(current.activityLog || [])
+        ].slice(0, 30)
+      }));
+      showToast(`${studentDocument.label} updated.`);
+    };
+    reader.readAsDataURL(file);
+  }
+
   async function recordPayment(event) {
     event.preventDefault();
 
@@ -360,6 +620,9 @@ export default function ReceptionDesktop({ theme, setTheme }) {
       receiptNo: createReceiptNo(data.payments.length),
       studentId: selectedStudent.id,
       studentName: selectedStudent.name,
+      className: selectedStudent.className,
+      section: selectedStudent.section,
+      admissionNumber: selectedStudent.admissionNumber,
       feeType: paymentInput.feeType,
       amount: paymentInput.amount,
       discount: paymentInput.discount,
@@ -405,23 +668,63 @@ export default function ReceptionDesktop({ theme, setTheme }) {
 
   async function addStudent(event) {
     event.preventDefault();
-    const nextIndex = data.students.length + 1;
+    const admissionNumber = studentForm.admissionNumber || nextAdmissionNumber;
+    const shouldEnroll = ["Approved", "Enrolled"].includes(studentForm.admissionStatus);
+    const duplicateAdmission = data.students.some((student) => student.admissionNumber === admissionNumber);
+    if (duplicateAdmission) {
+      showToast("Admission number already exists. Refresh and try again.");
+      return;
+    }
+
+    const nextIndex = activeStudents.length + 1;
+    const admission = {
+      id: `adm-${Date.now()}`,
+      admissionNumber,
+      studentName: studentForm.name,
+      guardianName: studentForm.parentName,
+      phone: studentForm.mobile,
+      classRequested: studentForm.className,
+      section: studentForm.section,
+      status: studentForm.admissionStatus,
+      workflowStatus: studentForm.admissionStatus,
+      notes: shouldEnroll ? "Approved and moved to student database." : "Admission form saved for follow-up.",
+      date: today()
+    };
     const student = {
       id: `stu-${Date.now()}`,
       ...studentForm,
+      admissionNumber,
       rollNumber: studentForm.rollNumber || String(nextIndex).padStart(2, "0"),
       createdAt: today(),
       dueBalance: 0,
       attendance: 100,
       status: "Active",
-      portalId: `VIDY-2026-${String(nextIndex).padStart(4, "0")}`,
+      isDeleted: false,
+      portalId: createPortalId(activeStudents.length),
       password: generatePassword()
     };
 
     if (cloudMode) {
       try {
+        await createCloudAdmission({
+          studentName: admission.studentName,
+          guardianName: admission.guardianName,
+          phone: admission.phone,
+          classRequested: admission.classRequested,
+          status: studentForm.admissionStatus.toLowerCase()
+        });
+
+        if (!shouldEnroll) {
+          const cloudData = await loadCloudReceptionData();
+          setData(cloudData);
+          resetAdmissionForm();
+          showToast("Admission form saved to cloud queue.");
+          return;
+        }
+
         const created = await createCloudStudent({
           ...studentForm,
+          admissionNumber,
           mobile: studentForm.mobile,
           parentName: studentForm.parentName,
           parentMobile: studentForm.mobile,
@@ -430,7 +733,8 @@ export default function ReceptionDesktop({ theme, setTheme }) {
         const cloudData = await loadCloudReceptionData();
         setData(cloudData);
         setSelectedStudentId(String(created.student.id));
-        showToast(`Student created. Login ${created.credentials.login}`);
+        resetAdmissionForm();
+        showToast(`Admission approved. Login ${created.credentials.login}`);
         return;
       } catch (error) {
         console.error(error);
@@ -441,40 +745,23 @@ export default function ReceptionDesktop({ theme, setTheme }) {
 
     setData((current) => ({
       ...current,
-      students: [student, ...current.students],
+      admissions: [admission, ...(current.admissions || [])],
+      students: shouldEnroll ? [student, ...current.students] : current.students,
       activityLog: [
-        { id: `act-${Date.now()}`, title: "Student enrolled", detail: `${student.name} / ${student.className}-${student.section}`, date: today() },
+        {
+          id: `act-${Date.now()}`,
+          title: shouldEnroll ? "Admission approved" : "Admission saved",
+          detail: `${admissionNumber} / ${student.name} / ${student.className}-${student.section}`,
+          date: today()
+        },
         ...(current.activityLog || [])
       ].slice(0, 20)
     }));
-    setSelectedStudentId(student.id);
-    setStudentForm({
-      name: "",
-      admissionNumber: "",
-      fatherName: "",
-      motherName: "",
-      dob: "",
-      gender: "Male",
-      className: "",
-      section: "",
-      rollNumber: "",
-      session: "2026-27",
-      parentName: "",
-      mobile: "",
-      alternateMobile: "",
-      email: "",
-      occupation: "",
-      address: "",
-      previousSchool: "",
-      aadhaarId: "",
-      photoUrl: "",
-      feePlan: "Monthly",
-      birthCertificate: false,
-      transferCertificate: false,
-      aadhaarDocument: false,
-      photoDocument: false
-    });
-    showToast("Student profile and portal login created.");
+    if (shouldEnroll) {
+      setSelectedStudentId(student.id);
+    }
+    resetAdmissionForm();
+    showToast(shouldEnroll ? "Student profile and portal login created." : "Admission saved. Approve it when ready.");
   }
 
   async function resetPassword(studentId) {
@@ -496,6 +783,113 @@ export default function ReceptionDesktop({ theme, setTheme }) {
       students: current.students.map((student) => (student.id === studentId ? { ...student, password } : student))
     }));
     showToast("Secure password reset successfully.");
+  }
+
+  async function softDeleteStudent(student) {
+    if (!student) {
+      return;
+    }
+
+    if (!isAdminRole(data.settings.role)) {
+      showToast("Only Admin users can delete students.");
+      return;
+    }
+
+    const confirmed = window.confirm("Are you sure you want to delete this student?");
+    if (!confirmed) {
+      return;
+    }
+
+    if (cloudMode && student.databaseId) {
+      try {
+        await deleteCloudStudent(student.databaseId, "soft");
+        const cloudData = await loadCloudReceptionData();
+        setData(cloudData);
+        setSelectedStudentId(activeOnly(cloudData.students)[0]?.id || "");
+        showToast("Student deleted in cloud with audit log.");
+        return;
+      } catch (error) {
+        console.error(error);
+        showToast(error.message || "Could not delete cloud student.");
+        return;
+      }
+    }
+
+    setData((current) => ({
+      ...current,
+      students: current.students.map((item) =>
+        item.id === student.id
+          ? {
+              ...item,
+              isDeleted: true,
+              status: "Inactive",
+              deletedAt: new Date().toISOString(),
+              deletedBy: current.settings.role
+            }
+          : item
+      ),
+      deletedStudents: [
+        {
+          id: `del-${Date.now()}`,
+          studentId: student.id,
+          admissionNumber: student.admissionNumber,
+          studentName: student.name,
+          className: student.className,
+          section: student.section,
+          deletedBy: current.settings.role,
+          deletedAt: new Date().toISOString(),
+          mode: "soft-delete"
+        },
+        ...(current.deletedStudents || [])
+      ],
+      activityLog: [
+        { id: `act-${Date.now()}`, title: "Student deleted", detail: `${student.name} marked inactive`, date: today() },
+        ...(current.activityLog || [])
+      ].slice(0, 30)
+    }));
+
+    if (selectedStudentId === student.id) {
+      setSelectedStudentId(activeStudents.find((item) => item.id !== student.id)?.id || "");
+    }
+    showToast("Student removed from active records. Audit log maintained.");
+  }
+
+  function permanentDeleteStudent(student) {
+    if (!student || !isSuperAdminRole(data.settings.role)) {
+      showToast("Permanent delete is restricted to Super Admin.");
+      return;
+    }
+
+    const confirmed = window.confirm("Permanent delete cannot be undone. Continue?");
+    if (!confirmed) {
+      return;
+    }
+
+    setData((current) => ({
+      ...current,
+      students: current.students.filter((item) => item.id !== student.id),
+      payments: current.payments.filter((payment) => payment.studentId !== student.id),
+      certificates: current.certificates.filter((certificate) => certificate.studentId !== student.id),
+      deletedStudents: [
+        {
+          id: `del-${Date.now()}`,
+          studentId: student.id,
+          admissionNumber: student.admissionNumber,
+          studentName: student.name,
+          className: student.className,
+          section: student.section,
+          deletedBy: current.settings.role,
+          deletedAt: new Date().toISOString(),
+          mode: "permanent-delete"
+        },
+        ...(current.deletedStudents || [])
+      ],
+      activityLog: [
+        { id: `act-${Date.now()}`, title: "Student permanently deleted", detail: student.name, date: today() },
+        ...(current.activityLog || [])
+      ].slice(0, 30)
+    }));
+    showToast("Student permanently deleted by Super Admin.");
   }
 
   async function addAdmission(event) {
@@ -609,89 +1003,6 @@ export default function ReceptionDesktop({ theme, setTheme }) {
     showToast(`${certificate.type} certificate issued.`);
   }
 
-  function issueIdCard(student = selectedStudent) {
-    if (!student) {
-      showToast("Select a student before issuing an ID card.");
-      return;
-    }
-
-    if (cloudMode) {
-      createCloudIdCard({ studentId: student.databaseId || student.id })
-        .then((card) => {
-          setData((current) => ({
-            ...current,
-            idCards: [card, ...(current.idCards || [])],
-            activityLog: [
-              { id: `act-${Date.now()}`, title: "ID card issued", detail: `${card.cardNo} / ${card.studentName}`, date: today() },
-              ...(current.activityLog || [])
-            ].slice(0, 20)
-          }));
-          showToast(`ID card ${card.cardNo} issued in cloud.`);
-        })
-        .catch((error) => {
-          console.error(error);
-          showToast(error.message || "Could not issue cloud ID card.");
-        });
-      return;
-    }
-
-    const card = {
-      id: `card-${Date.now()}-${student.id}`,
-      cardNo: `ID-${new Date().getFullYear()}-${String((data.idCards || []).length + 1).padStart(4, "0")}`,
-      studentId: student.id,
-      studentName: student.name,
-      status: "Active",
-      issuedAt: today()
-    };
-    setData((current) => ({
-      ...current,
-      idCards: [card, ...(current.idCards || [])],
-      activityLog: [
-        { id: `act-${Date.now()}`, title: "ID card issued", detail: `${card.cardNo} / ${card.studentName}`, date: today() },
-        ...(current.activityLog || [])
-      ].slice(0, 20)
-    }));
-    showToast(`ID card ${card.cardNo} issued.`);
-  }
-
-  function bulkIssueIdCards() {
-    const targets = idCardBatch === "all" ? filteredStudents : selectedStudent ? [selectedStudent] : [];
-    if (!targets.length) {
-      showToast("No students selected for ID card issue.");
-      return;
-    }
-
-    if (cloudMode && idCardBatch === "selected") {
-      issueIdCard(selectedStudent);
-      return;
-    }
-
-    if (cloudMode) {
-      showToast("Cloud bulk issue will be added after selected-card verification. Use selected student for now.");
-      return;
-    }
-
-    setData((current) => {
-      const cards = targets.map((student, index) => ({
-        id: `card-${Date.now()}-${student.id}`,
-        cardNo: `ID-${new Date().getFullYear()}-${String((current.idCards || []).length + index + 1).padStart(4, "0")}`,
-        studentId: student.id,
-        studentName: student.name,
-        status: "Active",
-        issuedAt: today()
-      }));
-      return {
-        ...current,
-        idCards: [...cards, ...(current.idCards || [])],
-        activityLog: [
-          { id: `act-${Date.now()}`, title: "ID cards issued", detail: `${cards.length} card(s) prepared for printing`, date: today() },
-          ...(current.activityLog || [])
-        ].slice(0, 20)
-      };
-    });
-    showToast(`${targets.length} ID card(s) issued.`);
-  }
-
   async function sendNotification(event) {
     event.preventDefault();
     const notification = {
@@ -732,13 +1043,216 @@ export default function ReceptionDesktop({ theme, setTheme }) {
     showToast("Notification recorded and ready for online sync.");
   }
 
+  function buildReceiptHtml() {
+    if (!receipt) {
+      return "";
+    }
+
+    return `<!doctype html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>${receipt.receiptNo}</title>
+          <style>
+            body { margin: 0; background: #fff; color: #07111f; font-family: Arial, sans-serif; }
+            .receipt { width: 760px; margin: 24px auto; border: 2px solid #07111f; padding: 28px; }
+            .header { display: grid; grid-template-columns: 100px 1fr; gap: 18px; align-items: center; border-bottom: 2px solid #07111f; padding-bottom: 14px; }
+            .logo { width: 88px; height: 88px; object-fit: contain; }
+            h1 { margin: 0; font-size: 28px; text-transform: uppercase; text-align: center; }
+            .address { margin-top: 6px; color: #42526a; text-align: center; font-size: 13px; }
+            .title { margin: 18px 0; text-align: center; font-weight: 800; font-size: 18px; text-decoration: underline; }
+            .meta, .student, .totals { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px 24px; margin-bottom: 16px; }
+            .item { display: flex; justify-content: space-between; gap: 20px; border-bottom: 1px dashed #9aa6b2; padding-bottom: 5px; }
+            table { width: 100%; border-collapse: collapse; margin: 18px 0; }
+            th, td { border: 1px solid #07111f; padding: 10px; text-align: left; }
+            th { background: #eef4ff; }
+            td:last-child, th:last-child { text-align: right; }
+            .total-row td { font-weight: 800; font-size: 17px; }
+            .signatures { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-top: 58px; }
+            .signatures span { border-top: 1px solid #07111f; padding-top: 8px; text-align: center; font-weight: 700; }
+            @media print { .receipt { margin: 0 auto; width: auto; min-height: calc(100vh - 64px); } }
+          </style>
+        </head>
+        <body>
+          <main class="receipt">
+            <section class="header">
+              <img class="logo" src="${brand.logoIcon}" alt="" />
+              <div>
+                <h1>${data.school.name}</h1>
+                <div class="address">${data.school.address || "School Address"} | Session ${data.school.session}</div>
+              </div>
+            </section>
+            <div class="title">Official Fee Receipt</div>
+            <section class="meta">
+              <div class="item"><strong>Receipt No.</strong><span>${receipt.receiptNo}</span></div>
+              <div class="item"><strong>Date</strong><span>${receipt.date}</span></div>
+              <div class="item"><strong>Payment Mode</strong><span>${receipt.mode}</span></div>
+              <div class="item"><strong>Session</strong><span>${data.school.session}</span></div>
+            </section>
+            <section class="student">
+              <div class="item"><strong>Student Name</strong><span>${receipt.studentName}</span></div>
+              <div class="item"><strong>Admission No.</strong><span>${receipt.admissionNumber || "-"}</span></div>
+              <div class="item"><strong>Class</strong><span>${receipt.className || "-"}-${receipt.section || "-"}</span></div>
+              <div class="item"><strong>Fee Type</strong><span>${receipt.feeType}</span></div>
+            </section>
+            <table>
+              <thead><tr><th>Description</th><th>Amount</th></tr></thead>
+              <tbody>
+                <tr><td>${receipt.feeType}</td><td>${formatMoney(receipt.amount)}</td></tr>
+                <tr><td>Fine / Late Fee</td><td>${formatMoney(receipt.lateFee)}</td></tr>
+                <tr><td>Discount</td><td>-${formatMoney(receipt.discount)}</td></tr>
+                <tr><td>Concession / Scholarship</td><td>-${formatMoney(receipt.concession)}</td></tr>
+                <tr class="total-row"><td>Total Paid</td><td>${formatMoney(receipt.total)}</td></tr>
+              </tbody>
+            </table>
+            <section class="signatures">
+              <span>Received By</span>
+              <span>Accountant</span>
+              <span>Principal / Seal</span>
+            </section>
+          </main>
+        </body>
+      </html>`;
+  }
+
   async function printReceipt() {
-    if (window.vidyaTechDesktop?.printToPdf) {
-      await window.vidyaTechDesktop.printToPdf();
-      showToast("Receipt PDF saved.");
+    if (!receipt) {
+      showToast("Generate a receipt first.");
       return;
     }
-    window.print();
+
+    const html = buildReceiptHtml();
+    if (window.vidyaTechDesktop?.printReceiptHtml) {
+      const result = await window.vidyaTechDesktop.printReceiptHtml(html);
+      if (!result?.canceled) {
+        showToast("Receipt sent to printer.");
+      }
+      return;
+    }
+
+    const printWindow = window.open("", "_blank", "width=900,height=1100");
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+  }
+
+  function exportFilteredReport() {
+    const rows = [
+      ["S.No.", "Student Name", "Class", "Section", "Fee Dues", "Pending Documents", "House"],
+      ...managementStudents.map((student, index) => [
+        index + 1,
+        student.name,
+        student.className,
+        student.section,
+        student.dueBalance,
+        getMissingDocuments(student).map((document) => document.label).join("; ") || "Complete",
+        student.house || "-"
+      ])
+    ];
+    const csv = rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(",")).join("\n");
+    downloadBlob(csv, `vidyatech-filtered-students-${today()}.csv`, "text/csv");
+    showToast("Filtered report downloaded.");
+  }
+
+  function generateShareableReport() {
+    const rows = managementStudents.slice(0, 28);
+    const canvas = document.createElement("canvas");
+    const width = 1600;
+    const rowHeight = 54;
+    const headerHeight = 210;
+    const height = headerHeight + rowHeight * (rows.length + 1) + 80;
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d");
+
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, width, height);
+    context.fillStyle = "#0b1728";
+    context.fillRect(0, 0, width, 150);
+    context.fillStyle = "#ffffff";
+    context.font = "800 46px Arial";
+    context.fillText(data.school.name, 60, 64);
+    context.font = "600 24px Arial";
+    context.fillText(`${data.school.address || "School Address"} | Session ${data.school.session}`, 60, 108);
+    context.fillStyle = "#0f62fe";
+    context.fillRect(60, 168, width - 120, 4);
+    context.fillStyle = "#0b1728";
+    context.font = "800 30px Arial";
+    context.fillText("School Standard Shareable Report", 60, 202);
+
+    const columns = [
+      { label: "S.No.", x: 60, width: 80 },
+      { label: "Student Name", x: 145, width: 310 },
+      { label: "Class", x: 465, width: 105 },
+      { label: "Sec.", x: 580, width: 85 },
+      { label: "Fees Dues", x: 675, width: 150 },
+      { label: "Conveyance", x: 835, width: 150 },
+      { label: "Fine", x: 995, width: 120 },
+      { label: "Total", x: 1125, width: 150 },
+      { label: "Pending Documents", x: 1285, width: 205 },
+      { label: "House", x: 1495, width: 80 }
+    ];
+
+    const drawCell = (text, x, y, widthValue, bold = false) => {
+      context.font = `${bold ? "800" : "600"} 20px Arial`;
+      context.fillStyle = "#0b1728";
+      const cleanText = String(text || "-");
+      const fitted = cleanText.length > 24 ? `${cleanText.slice(0, 23)}...` : cleanText;
+      context.fillText(fitted, x + 10, y + 34, widthValue - 20);
+    };
+
+    let y = headerHeight;
+    context.fillStyle = "#eaf2ff";
+    context.fillRect(60, y, width - 120, rowHeight);
+    columns.forEach((column) => drawCell(column.label, column.x, y, column.width, true));
+    y += rowHeight;
+
+    rows.forEach((student, index) => {
+      context.fillStyle = index % 2 === 0 ? "#ffffff" : "#f8fbff";
+      context.fillRect(60, y, width - 120, rowHeight);
+      const due = Number(student.dueBalance || 0);
+      const pending = getMissingDocuments(student).map((document) => document.label).join(", ") || "Complete";
+      const values = [
+        index + 1,
+        student.name,
+        student.className,
+        student.section,
+        formatMoney(due),
+        formatMoney(student.conveyance || 0),
+        formatMoney(student.fine || 0),
+        formatMoney(due + Number(student.conveyance || 0) + Number(student.fine || 0)),
+        pending,
+        student.house || "-"
+      ];
+      columns.forEach((column, columnIndex) => drawCell(values[columnIndex], column.x, y, column.width));
+      y += rowHeight;
+    });
+
+    context.strokeStyle = "#d3dfef";
+    context.lineWidth = 2;
+    for (let lineY = headerHeight; lineY <= y; lineY += rowHeight) {
+      context.beginPath();
+      context.moveTo(60, lineY);
+      context.lineTo(width - 60, lineY);
+      context.stroke();
+    }
+    context.font = "600 20px Arial";
+    context.fillStyle = "#536176";
+    context.fillText(`Generated on ${today()} | VidyaTech Reception`, 60, height - 34);
+
+    canvas.toBlob((blob) => {
+      downloadBlob(blob, `vidyatech-shareable-report-${today()}.png`, "image/png");
+    }, "image/png", 0.94);
+
+    setData((current) => ({
+      ...current,
+      reportLogs: [
+        { id: `rep-${Date.now()}`, type: "shareable-report", filters: managementFilters, count: rows.length, generatedAt: new Date().toISOString() },
+        ...(current.reportLogs || [])
+      ]
+    }));
+    showToast("WhatsApp-ready PNG report generated.");
   }
 
   async function saveBackup() {
@@ -888,9 +1402,9 @@ export default function ReceptionDesktop({ theme, setTheme }) {
                   <strong>{stats.certificatesIssued}</strong>
                 </article>
                 <article>
-                  <Fingerprint size={22} />
-                  <span>ID Cards Active</span>
-                  <strong>{data.idCards?.length || 0}</strong>
+                  <FileText size={22} />
+                  <span>Pending Documents</span>
+                  <strong>{stats.pendingDocuments}</strong>
                 </article>
               </div>
 
@@ -909,7 +1423,7 @@ export default function ReceptionDesktop({ theme, setTheme }) {
                     </button>
                     <button type="button" onClick={() => setActiveTab("students")}>
                       <UserPlus size={22} />
-                      Add Student
+                      Student Database
                     </button>
                     <button type="button" onClick={() => setActiveTab("admissions")}>
                       <CalendarCheck2 size={22} />
@@ -923,9 +1437,9 @@ export default function ReceptionDesktop({ theme, setTheme }) {
                       <Printer size={22} />
                       Print Certificate
                     </button>
-                    <button type="button" onClick={() => setActiveTab("idcards")}>
-                      <Fingerprint size={22} />
-                      ID Card
+                    <button type="button" onClick={() => setActiveTab("management")}>
+                      <Filter size={22} />
+                      Filter Records
                     </button>
                     <button type="button" onClick={() => setActiveTab("notifications")}>
                       <Send size={22} />
@@ -1057,34 +1571,50 @@ export default function ReceptionDesktop({ theme, setTheme }) {
               </section>
 
               <section className="receipt-preview reception-panel">
+                {receipt && (
+                  <div className="receipt-toolbar">
+                    <button className="btn btn-primary" type="button" onClick={printReceipt}>
+                      <Printer size={18} />
+                      Print Receipt
+                    </button>
+                  </div>
+                )}
                 <div className="receipt-paper">
                   <div className="receipt-head">
                     <img className="receipt-logo" src={brand.logoFull} alt="VidyaTech" />
                     <div>
                       <strong>{data.school.name}</strong>
-                      <span>Official Fee Receipt</span>
+                      <span>{data.school.address || "School Address"} | Session {data.school.session}</span>
                     </div>
                   </div>
                   {receipt ? (
                     <>
+                      <div className="receipt-title">Official Fee Receipt</div>
                       <div className="receipt-meta">
-                        <span>{receipt.receiptNo}</span>
-                        <span>{receipt.date}</span>
+                        <span>Receipt No. {receipt.receiptNo}</span>
+                        <span>Date {receipt.date}</span>
                       </div>
                       <dl>
                         <dt>Student</dt>
                         <dd>{receipt.studentName}</dd>
+                        <dt>Class</dt>
+                        <dd>{receipt.className}-{receipt.section}</dd>
+                        <dt>Admission No.</dt>
+                        <dd>{receipt.admissionNumber}</dd>
                         <dt>Fee Type</dt>
                         <dd>{receipt.feeType}</dd>
                         <dt>Payment Mode</dt>
                         <dd>{receipt.mode}</dd>
+                        <dt>Fine</dt>
+                        <dd>{formatMoney(receipt.lateFee)}</dd>
                         <dt>Net Paid</dt>
                         <dd>{formatMoney(receipt.total)}</dd>
                       </dl>
-                      <button className="btn btn-secondary" type="button" onClick={printReceipt}>
-                        <Printer size={18} />
-                        Print / Save PDF
-                      </button>
+                      <div className="receipt-signatures">
+                        <span>Received By</span>
+                        <span>Accountant</span>
+                        <span>Principal / Seal</span>
+                      </div>
                     </>
                   ) : (
                     <div className="empty-state">
@@ -1136,123 +1666,79 @@ export default function ReceptionDesktop({ theme, setTheme }) {
           )}
 
           {activeTab === "students" && (
-            <div className="reception-grid student-grid">
+            <div className="reception-grid two">
               <section className="reception-panel">
                 <div className="panel-heading">
                   <div>
-                    <span>Student database</span>
-                    <h2>Add admission / student record</h2>
+                    <span>Records</span>
+                    <h2>Student database</h2>
                   </div>
-                  <UserPlus size={24} />
-                </div>
-                <form className="reception-form" onSubmit={addStudent}>
-                  <Field label="Student Name">
-                    <input required value={studentForm.name} onChange={(event) => patchStudentForm("name", event.target.value)} />
-                  </Field>
-                  <div className="form-row">
-                    <Field label="Father Name">
-                      <input value={studentForm.fatherName} onChange={(event) => patchStudentForm("fatherName", event.target.value)} />
-                    </Field>
-                    <Field label="Mother Name">
-                      <input value={studentForm.motherName} onChange={(event) => patchStudentForm("motherName", event.target.value)} />
-                    </Field>
-                  </div>
-                  <div className="form-row">
-                    <Field label="DOB">
-                      <input type="date" value={studentForm.dob} onChange={(event) => patchStudentForm("dob", event.target.value)} />
-                    </Field>
-                    <Field label="Gender">
-                      <select value={studentForm.gender} onChange={(event) => patchStudentForm("gender", event.target.value)}>
-                        <option>Male</option>
-                        <option>Female</option>
-                        <option>Other</option>
-                      </select>
-                    </Field>
-                  </div>
-                  <div className="form-row">
-                    <Field label="Admission Number">
-                      <input value={studentForm.admissionNumber} onChange={(event) => patchStudentForm("admissionNumber", event.target.value)} placeholder="Auto if blank" />
-                    </Field>
-                    <Field label="Roll Number">
-                      <input value={studentForm.rollNumber} onChange={(event) => patchStudentForm("rollNumber", event.target.value)} />
-                    </Field>
-                  </div>
-                  <div className="form-row">
-                    <Field label="Class">
-                      <input required value={studentForm.className} onChange={(event) => patchStudentForm("className", event.target.value)} />
-                    </Field>
-                    <Field label="Section">
-                      <input required value={studentForm.section} onChange={(event) => patchStudentForm("section", event.target.value)} />
-                    </Field>
-                  </div>
-                  <Field label="Session">
-                    <input value={studentForm.session} onChange={(event) => patchStudentForm("session", event.target.value)} />
-                  </Field>
-                  <Field label="Parent / Guardian">
-                    <input required value={studentForm.parentName} onChange={(event) => patchStudentForm("parentName", event.target.value)} />
-                  </Field>
-                  <div className="form-row">
-                    <Field label="Parent Mobile">
-                      <input required value={studentForm.mobile} onChange={(event) => patchStudentForm("mobile", event.target.value)} />
-                    </Field>
-                    <Field label="Alternate Mobile">
-                      <input value={studentForm.alternateMobile} onChange={(event) => patchStudentForm("alternateMobile", event.target.value)} />
-                    </Field>
-                  </div>
-                  <div className="form-row">
-                    <Field label="Email">
-                      <input type="email" value={studentForm.email} onChange={(event) => patchStudentForm("email", event.target.value)} />
-                    </Field>
-                    <Field label="Occupation">
-                      <input value={studentForm.occupation} onChange={(event) => patchStudentForm("occupation", event.target.value)} />
-                    </Field>
-                  </div>
-                  <Field label="Address">
-                    <textarea rows="3" value={studentForm.address} onChange={(event) => patchStudentForm("address", event.target.value)} />
-                  </Field>
-                  <div className="form-row">
-                    <Field label="Previous School">
-                      <input value={studentForm.previousSchool} onChange={(event) => patchStudentForm("previousSchool", event.target.value)} />
-                    </Field>
-                    <Field label="Aadhaar / ID">
-                      <input value={studentForm.aadhaarId} onChange={(event) => patchStudentForm("aadhaarId", event.target.value)} />
-                    </Field>
-                  </div>
-                  <Field label="Photo URL">
-                    <input value={studentForm.photoUrl} onChange={(event) => patchStudentForm("photoUrl", event.target.value)} placeholder="Cloud file URL when uploaded" />
-                  </Field>
-                  <div className="document-checks">
-                    <label><input type="checkbox" checked={studentForm.birthCertificate} onChange={(event) => patchStudentForm("birthCertificate", event.target.checked)} /> Birth Certificate</label>
-                    <label><input type="checkbox" checked={studentForm.transferCertificate} onChange={(event) => patchStudentForm("transferCertificate", event.target.checked)} /> Transfer Certificate</label>
-                    <label><input type="checkbox" checked={studentForm.aadhaarDocument} onChange={(event) => patchStudentForm("aadhaarDocument", event.target.checked)} /> Aadhaar</label>
-                    <label><input type="checkbox" checked={studentForm.photoDocument} onChange={(event) => patchStudentForm("photoDocument", event.target.checked)} /> Photo</label>
-                  </div>
-                  <button className="btn btn-primary" type="submit">
-                    <Plus size={18} />
-                    Enroll Student & Generate Login
+                  <button className="btn btn-secondary" type="button" onClick={() => setActiveTab("admissions")}>
+                    <UserPlus size={18} />
+                    New Admission
                   </button>
-                </form>
+                </div>
+                <div className="student-list">
+                  {filteredStudents.map((student) => (
+                    <article key={student.id} className={selectedStudentId === student.id ? "student-record active" : "student-record"}>
+                      <button type="button" onClick={() => setSelectedStudentId(student.id)}>
+                        <img src={student.profilePhoto || brand.logoIcon} alt="" />
+                        <span>
+                          <strong>{student.name}</strong>
+                          <small>{student.admissionNumber} / {student.className}-{student.section} / Roll {student.rollNumber || "-"}</small>
+                          <small>{student.mobile}</small>
+                        </span>
+                      </button>
+                      <div className="student-record-actions">
+                        <button className="btn btn-secondary" type="button" onClick={() => { setSelectedStudentId(student.id); setActiveTab("profiles"); }}>
+                          <Eye size={16} />
+                          Profile
+                        </button>
+                        <button className="btn btn-danger" type="button" disabled={!isAdminRole(data.settings.role)} onClick={() => softDeleteStudent(student)}>
+                          <Trash2 size={16} />
+                          Delete
+                        </button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
               </section>
 
               <section className="reception-panel">
                 <div className="panel-heading">
                   <div>
-                    <span>Records</span>
-                    <h2>Fast student lookup</h2>
+                    <span>Deleted records</span>
+                    <h2>Soft delete audit</h2>
                   </div>
+                  <ShieldCheck size={24} />
                 </div>
-                <div className="student-list">
-                  {filteredStudents.map((student) => (
-                    <button
-                      key={student.id}
-                      type="button"
-                      className={selectedStudentId === student.id ? "active" : ""}
-                      onClick={() => setSelectedStudentId(student.id)}
-                    >
-                      <strong>{student.name}</strong>
-                      <span>{student.admissionNumber} / {student.className}-{student.section} / Roll {student.rollNumber}</span>
-                      <small>{student.mobile}</small>
-                    </button>
+                <div className="data-table compact-table">
+                  <div className="table-row table-head">
+                    <span>Student</span>
+                    <span>Class</span>
+                    <span>Deleted By</span>
+                    <span>Deleted On</span>
+                    <span>Mode</span>
+                  </div>
+                  {(data.deletedStudents || []).slice(0, 10).map((record) => (
+                    <div key={record.id} className="table-row">
+                      <span>{record.studentName}</span>
+                      <span>{record.className}-{record.section}</span>
+                      <span>{record.deletedBy}</span>
+                      <span>{String(record.deletedAt).slice(0, 10)}</span>
+                      <span className="soft-pill">{record.mode}</span>
+                    </div>
+                  ))}
+                  {deletedStudents.map((student) => (
+                    <div key={student.id} className="table-row">
+                      <span>{student.name}</span>
+                      <span>{student.className}-{student.section}</span>
+                      <span>{student.deletedBy || "-"}</span>
+                      <span>{String(student.deletedAt || "").slice(0, 10) || "-"}</span>
+                      <button className="btn btn-danger" type="button" disabled={!isSuperAdminRole(data.settings.role)} onClick={() => permanentDeleteStudent(student)}>
+                        Permanent Delete
+                      </button>
+                    </div>
                   ))}
                 </div>
               </section>
@@ -1302,7 +1788,7 @@ export default function ReceptionDesktop({ theme, setTheme }) {
                     <select value={selectedStudentId} onChange={(event) => setSelectedStudentId(event.target.value)}>
                       {filteredStudents.map((student) => (
                         <option key={student.id} value={student.id}>
-                          {student.name} - {student.className}-{student.section}
+                          {student.name} - {student.className}-{student.section} - {student.admissionNumber}
                         </option>
                       ))}
                     </select>
@@ -1368,74 +1854,6 @@ export default function ReceptionDesktop({ theme, setTheme }) {
             </div>
           )}
 
-          {activeTab === "idcards" && (
-            <div className="reception-grid two">
-              <section className="reception-panel">
-                <div className="panel-heading">
-                  <div>
-                    <span>ID cards</span>
-                    <h2>Issue and bulk print student cards</h2>
-                  </div>
-                  <Fingerprint size={24} />
-                </div>
-                <div className="idcard-actions">
-                  <select value={idCardBatch} onChange={(event) => setIdCardBatch(event.target.value)}>
-                    <option value="selected">Selected student</option>
-                    <option value="all">All filtered students</option>
-                  </select>
-                  <button className="btn btn-primary" type="button" onClick={bulkIssueIdCards}>
-                    <CheckCircle2 size={18} />
-                    Issue ID Card
-                  </button>
-                  <button className="btn btn-secondary" type="button" onClick={printReceipt}>
-                    <Printer size={18} />
-                    Bulk Print
-                  </button>
-                </div>
-                <div className="id-card-preview">
-                  <div>
-                    <img src={selectedStudent?.photoUrl || brand.logoIcon} alt="" />
-                    <strong>{selectedStudent?.name || "Select Student"}</strong>
-                    <span>{selectedStudent?.portalId || "STUDENT-ID"}</span>
-                  </div>
-                  <dl>
-                    <dt>Class</dt>
-                    <dd>{selectedStudent ? `${selectedStudent.className}-${selectedStudent.section}` : "-"}</dd>
-                    <dt>Parent Contact</dt>
-                    <dd>{selectedStudent?.mobile || "-"}</dd>
-                    <dt>QR</dt>
-                    <dd>{selectedStudent?.admissionNumber || "-"}</dd>
-                  </dl>
-                </div>
-              </section>
-
-              <section className="reception-panel">
-                <div className="panel-heading">
-                  <div>
-                    <span>Register</span>
-                    <h2>Issued ID cards</h2>
-                  </div>
-                </div>
-                <div className="data-table">
-                  <div className="table-row table-head">
-                    <span>Card No.</span>
-                    <span>Student</span>
-                    <span>Issued</span>
-                    <span>Status</span>
-                  </div>
-                  {(data.idCards || []).map((card) => (
-                    <div key={card.id} className="table-row">
-                      <span>{card.cardNo}</span>
-                      <span>{card.studentName}</span>
-                      <span>{card.issuedAt}</span>
-                      <span className="soft-pill">{card.status}</span>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            </div>
-          )}
-
           {activeTab === "notifications" && (
             <div className="reception-grid two">
               <section className="reception-panel">
@@ -1491,45 +1909,121 @@ export default function ReceptionDesktop({ theme, setTheme }) {
           )}
 
           {activeTab === "admissions" && (
-            <div className="reception-grid two">
+            <div className="reception-grid admission-grid">
               <section className="reception-panel">
                 <div className="panel-heading">
                   <div>
                     <span>Admissions</span>
-                    <h2>Inquiry to enrollment workflow</h2>
+                    <h2>Admission to student database workflow</h2>
                   </div>
                   <UserPlus size={24} />
                 </div>
-                <form className="reception-form" onSubmit={addAdmission}>
-                  <Field label="Student Name">
-                    <input required value={admissionForm.studentName} onChange={(event) => patchAdmissionForm("studentName", event.target.value)} />
-                  </Field>
+                <form className="reception-form" onSubmit={addStudent}>
                   <div className="form-row">
-                    <Field label="Guardian Name">
-                      <input required value={admissionForm.guardianName} onChange={(event) => patchAdmissionForm("guardianName", event.target.value)} />
-                    </Field>
-                    <Field label="Mobile Number">
-                      <input required value={admissionForm.phone} onChange={(event) => patchAdmissionForm("phone", event.target.value)} />
-                    </Field>
-                  </div>
-                  <div className="form-row">
-                    <Field label="Class Requested">
-                      <input required value={admissionForm.classRequested} onChange={(event) => patchAdmissionForm("classRequested", event.target.value)} />
+                    <Field label="Admission Number">
+                      <input readOnly value={studentForm.admissionNumber || nextAdmissionNumber} />
                     </Field>
                     <Field label="Workflow Status">
-                      <select value={admissionForm.status} onChange={(event) => patchAdmissionForm("status", event.target.value)}>
+                      <select value={studentForm.admissionStatus} onChange={(event) => patchStudentForm("admissionStatus", event.target.value)}>
                         {admissionStatuses.map((status) => (
                           <option key={status}>{status}</option>
                         ))}
                       </select>
                     </Field>
                   </div>
-                  <Field label="Follow-up Notes">
-                    <textarea rows="4" value={admissionForm.notes} onChange={(event) => patchAdmissionForm("notes", event.target.value)} />
+                  <Field label="Student Name">
+                    <input required value={studentForm.name} onChange={(event) => patchStudentForm("name", event.target.value)} />
                   </Field>
+                  <div className="form-row">
+                    <Field label="Father Name">
+                      <input value={studentForm.fatherName} onChange={(event) => patchStudentForm("fatherName", event.target.value)} />
+                    </Field>
+                    <Field label="Mother Name">
+                      <input value={studentForm.motherName} onChange={(event) => patchStudentForm("motherName", event.target.value)} />
+                    </Field>
+                  </div>
+                  <div className="form-row">
+                    <Field label="DOB">
+                      <input type="date" value={studentForm.dob} onChange={(event) => patchStudentForm("dob", event.target.value)} />
+                    </Field>
+                    <Field label="Gender">
+                      <select value={studentForm.gender} onChange={(event) => patchStudentForm("gender", event.target.value)}>
+                        <option>Male</option>
+                        <option>Female</option>
+                        <option>Other</option>
+                      </select>
+                    </Field>
+                  </div>
+                  <div className="form-row">
+                    <Field label="Class">
+                      <input required value={studentForm.className} onChange={(event) => patchStudentForm("className", event.target.value)} />
+                    </Field>
+                    <Field label="Section">
+                      <input required value={studentForm.section} onChange={(event) => patchStudentForm("section", event.target.value)} />
+                    </Field>
+                  </div>
+                  <div className="form-row">
+                    <Field label="Roll Number">
+                      <input value={studentForm.rollNumber} onChange={(event) => patchStudentForm("rollNumber", event.target.value)} />
+                    </Field>
+                    <Field label="House">
+                      <select value={studentForm.house} onChange={(event) => patchStudentForm("house", event.target.value)}>
+                        {schoolHouses.map((house) => (
+                          <option key={house}>{house}</option>
+                        ))}
+                      </select>
+                    </Field>
+                  </div>
+                  <Field label="Session">
+                    <input value={studentForm.session} onChange={(event) => patchStudentForm("session", event.target.value)} />
+                  </Field>
+                  <Field label="Parent / Guardian">
+                    <input required value={studentForm.parentName} onChange={(event) => patchStudentForm("parentName", event.target.value)} />
+                  </Field>
+                  <div className="form-row">
+                    <Field label="Parent Mobile">
+                      <input required value={studentForm.mobile} onChange={(event) => patchStudentForm("mobile", event.target.value)} />
+                    </Field>
+                    <Field label="Alternate Mobile">
+                      <input value={studentForm.alternateMobile} onChange={(event) => patchStudentForm("alternateMobile", event.target.value)} />
+                    </Field>
+                  </div>
+                  <div className="form-row">
+                    <Field label="Email">
+                      <input type="email" value={studentForm.email} onChange={(event) => patchStudentForm("email", event.target.value)} />
+                    </Field>
+                    <Field label="Occupation">
+                      <input value={studentForm.occupation} onChange={(event) => patchStudentForm("occupation", event.target.value)} />
+                    </Field>
+                  </div>
+                  <Field label="Address">
+                    <textarea rows="3" value={studentForm.address} onChange={(event) => patchStudentForm("address", event.target.value)} />
+                  </Field>
+                  <div className="form-row">
+                    <Field label="Previous School">
+                      <input value={studentForm.previousSchool} onChange={(event) => patchStudentForm("previousSchool", event.target.value)} />
+                    </Field>
+                    <Field label="Aadhaar / ID">
+                      <input value={studentForm.aadhaarId} onChange={(event) => patchStudentForm("aadhaarId", event.target.value)} />
+                    </Field>
+                  </div>
+                  <div className="document-upload-grid">
+                    {documentTypes.map((documentType) => {
+                      const uploaded = studentForm.documents?.find((document) => document.type === documentType.id);
+                      return (
+                        <label key={documentType.id} className={uploaded ? "document-upload uploaded" : "document-upload"}>
+                          <input type="file" accept={getFileAccept(documentType.id)} onChange={(event) => handleDocumentUpload(documentType.id, event.target.files?.[0])} />
+                          <FileText size={18} />
+                          <strong>{documentType.label}</strong>
+                          <span>{uploaded ? uploaded.fileName : documentType.required ? "Required" : "Optional"}</span>
+                          {uploadProgress[documentType.id] ? <small>{uploadProgress[documentType.id]}% uploaded</small> : null}
+                        </label>
+                      );
+                    })}
+                  </div>
                   <button className="btn btn-primary" type="submit">
                     <CheckCircle2 size={18} />
-                    Save Admission Enquiry
+                    {["Approved", "Enrolled"].includes(studentForm.admissionStatus) ? "Approve & Create Student Login" : "Save Admission Form"}
                   </button>
                 </form>
               </section>
@@ -1554,13 +2048,230 @@ export default function ReceptionDesktop({ theme, setTheme }) {
                       <span>{admission.studentName}</span>
                       <span>{admission.guardianName}</span>
                       <span>{admission.phone}</span>
-                      <span>{admission.classRequested}</span>
+                      <span>{admission.classRequested}-{admission.section || ""}</span>
                       <span className="soft-pill">{admission.status}</span>
                     </div>
                   ))}
                 </div>
               </section>
             </div>
+          )}
+
+          {activeTab === "profiles" && (
+            <div className="reception-grid profile-grid">
+              <section className="reception-panel">
+                <div className="panel-heading">
+                  <div>
+                    <span>Student profile</span>
+                    <h2>Search and open complete profile</h2>
+                  </div>
+                  <UserRoundCheck size={24} />
+                </div>
+                <div className="student-list">
+                  {filteredStudents.map((student) => (
+                    <button
+                      key={student.id}
+                      type="button"
+                      className={selectedStudentId === student.id ? "active" : ""}
+                      onClick={() => setSelectedStudentId(student.id)}
+                    >
+                      <strong>{student.name}</strong>
+                      <span>{student.className}-{student.section} / {student.admissionNumber}</span>
+                      <small>{student.mobile}</small>
+                    </button>
+                  ))}
+                </div>
+              </section>
+
+              <section className="reception-panel profile-panel">
+                {selectedStudent ? (
+                  <>
+                    <div className="profile-header">
+                      <img src={selectedStudent.profilePhoto || brand.logoIcon} alt="" />
+                      <div>
+                        <span className="soft-pill">{selectedStudent.status || "Active"}</span>
+                        <h2>{selectedStudent.name}</h2>
+                        <p>{selectedStudent.admissionNumber} / {selectedStudent.className}-{selectedStudent.section} / House {selectedStudent.house || "-"}</p>
+                      </div>
+                    </div>
+                    {getMissingDocuments(selectedStudent).length > 0 && (
+                      <div className="alert-strip">
+                        <FileText size={18} />
+                        Pending documents: {getMissingDocuments(selectedStudent).map((document) => document.label).join(", ")}
+                      </div>
+                    )}
+                    <div className="profile-sections">
+                      <article>
+                        <h3>Personal Details</h3>
+                        <dl>
+                          <dt>DOB</dt><dd>{selectedStudent.dob || "-"}</dd>
+                          <dt>Gender</dt><dd>{selectedStudent.gender || "-"}</dd>
+                          <dt>Aadhaar</dt><dd>{selectedStudent.aadhaarId || "-"}</dd>
+                          <dt>Address</dt><dd>{selectedStudent.address || "-"}</dd>
+                        </dl>
+                      </article>
+                      <article>
+                        <h3>Admission Details</h3>
+                        <dl>
+                          <dt>Session</dt><dd>{selectedStudent.session || data.school.session}</dd>
+                          <dt>Roll No.</dt><dd>{selectedStudent.rollNumber || "-"}</dd>
+                          <dt>Previous School</dt><dd>{selectedStudent.previousSchool || "-"}</dd>
+                          <dt>Attendance</dt><dd>{selectedStudent.attendance || 0}%</dd>
+                        </dl>
+                      </article>
+                      <article>
+                        <h3>Parent Details</h3>
+                        <dl>
+                          <dt>Guardian</dt><dd>{selectedStudent.parentName}</dd>
+                          <dt>Father</dt><dd>{selectedStudent.fatherName || "-"}</dd>
+                          <dt>Mother</dt><dd>{selectedStudent.motherName || "-"}</dd>
+                          <dt>Mobile</dt><dd>{selectedStudent.mobile}</dd>
+                        </dl>
+                      </article>
+                      <article>
+                        <h3>Fee and Credentials</h3>
+                        <dl>
+                          <dt>Fee Status</dt><dd>{Number(selectedStudent.dueBalance || 0) > 0 ? formatMoney(selectedStudent.dueBalance) : "Paid / Clear"}</dd>
+                          <dt>Portal ID</dt><dd>{selectedStudent.portalId}</dd>
+                          <dt>Password</dt><dd>{selectedStudent.password}</dd>
+                          <dt>Plan</dt><dd>{selectedStudent.feePlan || "-"}</dd>
+                        </dl>
+                      </article>
+                    </div>
+                    <div className="document-library">
+                      <h3>Uploaded Documents</h3>
+                      {documentTypes.map((documentType) => {
+                        const uploaded = getStudentDocuments(selectedStudent).find((document) => document.type === documentType.id);
+                        return (
+                          <article key={documentType.id} className={uploaded ? "document-card uploaded" : "document-card missing"}>
+                            <FileText size={20} />
+                            <div>
+                              <strong>{documentType.label}</strong>
+                              <span>{uploaded ? uploaded.fileName : "Missing"}</span>
+                            </div>
+                            {uploaded ? (
+                              <span className="inline-actions">
+                                <button className="btn btn-secondary" type="button" onClick={() => downloadDocument(uploaded)}>
+                                  <Download size={16} />
+                                  Download
+                                </button>
+                                <label className="btn btn-secondary">
+                                  <Upload size={16} />
+                                  Replace
+                                  <input type="file" accept={getFileAccept(documentType.id)} onChange={(event) => replaceStudentDocument(selectedStudent.id, documentType.id, event.target.files?.[0])} hidden />
+                                </label>
+                              </span>
+                            ) : (
+                              <label className="btn btn-danger">
+                                <Upload size={16} />
+                                Upload
+                                <input type="file" accept={getFileAccept(documentType.id)} onChange={(event) => replaceStudentDocument(selectedStudent.id, documentType.id, event.target.files?.[0])} hidden />
+                              </label>
+                            )}
+                          </article>
+                        );
+                      })}
+                    </div>
+                  </>
+                ) : (
+                  <div className="empty-state">
+                    <UserRoundCheck size={38} />
+                    <strong>Select a student</strong>
+                    <span>Search by name, class, section, or admission number.</span>
+                  </div>
+                )}
+              </section>
+            </div>
+          )}
+
+          {activeTab === "management" && (
+            <section className="reception-panel">
+              <div className="panel-heading">
+                <div>
+                  <span>Advanced management</span>
+                  <h2>Class-wise, section-wise, dues, documents, and house filters</h2>
+                </div>
+                <div className="button-row">
+                  <button className="btn btn-secondary" type="button" onClick={exportFilteredReport}>
+                    <Download size={18} />
+                    Export Filtered CSV
+                  </button>
+                  <button className="btn btn-primary" type="button" onClick={generateShareableReport}>
+                    <ImagePlus size={18} />
+                    Generate Shareable Report
+                  </button>
+                </div>
+              </div>
+
+              <div className="filter-grid">
+                <Field label="Class">
+                  <select value={managementFilters.className} onChange={(event) => patchManagementFilter("className", event.target.value)}>
+                    {filterOptions.classes.map((item) => <option key={item}>{item}</option>)}
+                  </select>
+                </Field>
+                <Field label="Section">
+                  <select value={managementFilters.section} onChange={(event) => patchManagementFilter("section", event.target.value)}>
+                    {filterOptions.sections.map((item) => <option key={item}>{item}</option>)}
+                  </select>
+                </Field>
+                <Field label="Fee Dues">
+                  <select value={managementFilters.feeDues} onChange={(event) => patchManagementFilter("feeDues", event.target.value)}>
+                    <option>{emptyFilterValue}</option>
+                    <option>With Dues</option>
+                    <option>No Dues</option>
+                  </select>
+                </Field>
+                <Field label="Pending Documents">
+                  <select value={managementFilters.pendingDocuments} onChange={(event) => patchManagementFilter("pendingDocuments", event.target.value)}>
+                    <option>{emptyFilterValue}</option>
+                    <option>Pending</option>
+                    <option>Complete</option>
+                  </select>
+                </Field>
+                <Field label="Document Type">
+                  <select value={managementFilters.documentType} onChange={(event) => patchManagementFilter("documentType", event.target.value)}>
+                    <option>{emptyFilterValue}</option>
+                    {documentTypes.map((documentType) => <option key={documentType.id} value={documentType.id}>{documentType.label}</option>)}
+                  </select>
+                </Field>
+                <Field label="House">
+                  <select value={managementFilters.house} onChange={(event) => patchManagementFilter("house", event.target.value)}>
+                    {filterOptions.houses.map((item) => <option key={item}>{item}</option>)}
+                  </select>
+                </Field>
+              </div>
+
+              <div className="data-table management-table">
+                <div className="table-row table-head">
+                  <span>Student</span>
+                  <span>Class</span>
+                  <span>Dues</span>
+                  <span>Missing Documents</span>
+                  <span>House</span>
+                  <span>Actions</span>
+                </div>
+                {managementStudents.map((student) => {
+                  const missing = getMissingDocuments(student);
+                  return (
+                    <div key={student.id} className="table-row">
+                      <span>{student.name}</span>
+                      <span>{student.className}-{student.section}</span>
+                      <strong>{formatMoney(student.dueBalance)}</strong>
+                      <span>{missing.map((document) => document.label).join(", ") || "Complete"}</span>
+                      <span className="soft-pill">{student.house || "-"}</span>
+                      <span className="inline-actions">
+                        <button className="btn btn-secondary" type="button" onClick={() => { setSelectedStudentId(student.id); setActiveTab("profiles"); }}>
+                          Profile
+                        </button>
+                        <button className="btn btn-secondary" type="button" onClick={() => { setSelectedStudentId(student.id); setActiveTab("billing"); }}>
+                          Receipt
+                        </button>
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
           )}
 
           {activeTab === "reports" && (
@@ -1571,9 +2282,9 @@ export default function ReceptionDesktop({ theme, setTheme }) {
                   <h2>Financial, admission, and class analytics</h2>
                 </div>
                 <div className="button-row">
-                  <button className="btn btn-secondary" type="button" onClick={printReceipt}>
-                    <Printer size={18} />
-                    Export PDF
+                  <button className="btn btn-primary" type="button" onClick={generateShareableReport}>
+                    <ImagePlus size={18} />
+                    Generate Shareable Report
                   </button>
                   <button className="btn btn-secondary" type="button" onClick={exportCsv}>
                     <Download size={18} />
@@ -1615,14 +2326,14 @@ export default function ReceptionDesktop({ theme, setTheme }) {
                 <article>
                   <UsersRound size={24} />
                   <span>Class Strength</span>
-                  <strong>{new Set(data.students.map((student) => `${student.className}-${student.section}`)).size}</strong>
+                  <strong>{new Set(activeStudents.map((student) => `${student.className}-${student.section}`)).size}</strong>
                 </article>
                 <article>
-                  <Fingerprint size={24} />
+                  <CalendarCheck2 size={24} />
                   <span>Avg Attendance</span>
                   <strong>
-                    {data.students.length
-                      ? Math.round(data.students.reduce((total, student) => total + Number(student.attendance || 0), 0) / data.students.length)
+                    {activeStudents.length
+                      ? Math.round(activeStudents.reduce((total, student) => total + Number(student.attendance || 0), 0) / activeStudents.length)
                       : 0}%
                   </strong>
                 </article>
@@ -1664,7 +2375,21 @@ export default function ReceptionDesktop({ theme, setTheme }) {
                 <article>
                   <LockKeyhole size={24} />
                   <strong>Current role</strong>
-                  <span>{data.settings.role}</span>
+                  <select
+                    value={data.settings.role}
+                    onChange={(event) =>
+                      setData((current) => ({
+                        ...current,
+                        settings: { ...current.settings, role: event.target.value }
+                      }))
+                    }
+                  >
+                    <option>Receptionist</option>
+                    <option>Accountant</option>
+                    <option>Admin</option>
+                    <option>Principal</option>
+                    <option>Super Admin</option>
+                  </select>
                   <span className="soft-pill">Role-ready: Receptionist, Accountant, Admin, Principal</span>
                 </article>
                 <article>
